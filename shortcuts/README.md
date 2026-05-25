@@ -18,7 +18,7 @@ Full walkthrough for the Apple Shortcuts → Google Sheets pipeline.
 | File | Siri phrase | Purpose |
 |---|---|---|
 | [log-mood.md](log-mood.md) | "Log mood" | Rate mood 1–5 |
-| [log-event.md](log-event.md) | "Log event" | Generic event logger with menu |
+| [log-event.md](log-event.md) | "Mark [event]" | Core logger + per-event wrappers ("Mark Coffee" fires in one shot) |
 | [log-focus-block.md](log-focus-block.md) | "Start focus" / "End focus" | Time focus blocks |
 
 ---

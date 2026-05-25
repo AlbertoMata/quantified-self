@@ -65,7 +65,7 @@ quantified-self/
 ├── shortcuts/
 │   ├── README.md                # Setup guide + Watch + automations
 │   ├── log-mood.md              # Log Mood shortcut
-│   ├── log-event.md             # Log Event (generic menu)
+│   ├── log-event.md             # Mark core + per-event wrappers (Siri one-shot)
 │   ├── log-focus-block.md       # Start/End Focus block
 │   └── morning-summary.md       # Morning Summary → Obsidian daily note
 ├── sheets/

@@ -8,7 +8,7 @@ function doPost(e) {
     const timestamp = data.timestamp || new Date().toISOString();
     const eventType = data.event_type || "custom";
     const value     = data.value     || "";
-    const notes     = data.notes     || "";
+    const notes     = data.notes || data.note || "";
     const source    = data.source    || "shortcut";
 
     sheet.appendRow([timestamp, eventType, value, notes, source]);

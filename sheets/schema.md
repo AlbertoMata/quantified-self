@@ -13,7 +13,7 @@ Tab name: `Log`
 | B | `event_type` | string | `mood` | See event types below |
 | C | `value` | string | `4` | Numeric or categorical depending on event |
 | D | `notes` | string | `slept badly` | Optional free text |
-| E | `source` | string | `siri` | `siri`, `watch`, `shortcut`, `automation`, `manual` |
+| E | `source` | string | `iPhone` | Device model returned by the Shortcuts **Device Details** action (e.g. `iPhone`, `Apple Watch Series 9`). Set automatically — no manual input needed. |
 
 ---
 
@@ -30,6 +30,8 @@ Tab name: `Log`
 | `arrived_home` | Empty | `` |
 | `left_home` | Empty | `` |
 | `commute_start` | Empty | `` |
+| `nof` | Empty (timestamp carries it) | `` |
+| `chairmaxxing` | Empty (timestamp carries it) | `` |
 | `custom` | Free text | `had a difficult conversation` |
 
 ---
