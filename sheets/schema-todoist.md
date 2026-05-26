@@ -28,10 +28,11 @@ One row per completed task (both one-off and recurring). The `is_recurring` flag
 | J | `due_date` | YYYY-MM-DD | `2026-05-23` | Original due date (for streak tracking) |
 | K | `duration_minutes` | integer | `30` | Task duration if set; empty otherwise |
 | L | `sync_date` | YYYY-MM-DD | `2026-05-23` | Date the sync script ran |
+| M | `parent_id` | string | `8284123456` | Todoist parent task ID; empty for top-level tasks. Self-blend on `parent_id ↔ task_id` to attach parent details |
 
 **Header row:**
 ```
-completed_at	task_id	task_content	project_id	project_name	section_name	labels	priority	is_recurring	due_date	duration_minutes	sync_date
+completed_at	task_id	task_content	project_id	project_name	section_name	labels	priority	is_recurring	due_date	duration_minutes	sync_date	parent_id
 ```
 
 ---
@@ -53,10 +54,11 @@ Daily snapshot of tasks that were due but not completed. The sync script **repla
 | G | `days_overdue` | integer | `2` | snapshot_date − due_date |
 | H | `priority` | integer 1–4 | `3` | |
 | I | `is_recurring` | boolean | `TRUE` | |
+| J | `parent_id` | string | `8284123456` | Todoist parent task ID; empty for top-level tasks. Self-blend on `parent_id ↔ task_id` (any Todoist tab) to attach parent details |
 
 **Header row:**
 ```
-snapshot_date	task_id	task_content	project_name	labels	due_date	days_overdue	priority	is_recurring
+snapshot_date	task_id	task_content	project_name	labels	due_date	days_overdue	priority	is_recurring	parent_id
 ```
 
 ---
@@ -100,3 +102,5 @@ Set these in the Apps Script project (**Project Settings → Script Properties**
 - Filter `Completions` to `is_recurring = TRUE` in Looker Studio for a pure habits view
 - Join `KarmaStats` with the `Health` sheet on `date` to correlate productivity with sleep/HRV
 - The `Overdue` tab is useful as a bar chart over time: aggregate `days_overdue` per week to spot periods of backlog accumulation
+- **Parent task self-blend:** join `Completions.parent_id ↔ Completions.task_id` (alias the right side as `parent`) to attach the parent's title, project, or labels to every subtask completion. Works the same on `Overdue.parent_id`
+- **Time per parent task:** chain blends — `quantified-self-everhour!TimeEntries.todoist_task_id ↔ Completions.task_id`, then `Completions.parent_id ↔ Completions.task_id` — to sum Everhour minutes per parent task without touching the Everhour script

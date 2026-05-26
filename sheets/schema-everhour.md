@@ -16,23 +16,25 @@ One row per time entry logged in Everhour. The sync pulls the last 2 days on eac
 
 | # | Column | Type | Example | Notes |
 |---|---|---|---|---|
-| A | `entry_id` | string | `abc123` | Everhour entry ID — stable dedup key |
+| A | `entry_id` | string | `2660155` | Time-record ID from Everhour — stable dedup key |
 | B | `date` | YYYY-MM-DD | `2026-05-23` | Date the time was worked — join key |
-| C | `user_id` | string | `12345` | Everhour user ID |
-| D | `project_id` | string | `proj_789` | Everhour project ID |
-| E | `project_name` | string | `Client XYZ` | Resolved project name |
-| F | `task_id` | string | `task_456` | Everhour task ID |
-| G | `task_name` | string | `Design mockups` | Task title |
-| H | `duration_seconds` | integer | `3600` | Raw duration from API |
-| I | `duration_hours` | decimal | `1.00` | Computed: seconds / 3600 (2 dp) |
-| J | `billable` | boolean | `TRUE` | Billable flag from Everhour |
-| K | `billable_rate` | decimal | `85.00` | Hourly rate if billable; empty otherwise |
-| L | `notes` | string | `Initial wireframes` | Entry comment |
-| M | `synced_at` | ISO 8601 | `2026-05-23T23:45:00Z` | When the sync script ran |
+| C | `user_id` | string | `1304` | Everhour user ID (`e.user` in the API response) |
+| D | `project_id` | string | `ev:1234567890` | First project the task belongs to. Prefix encodes the source: `ev:` native, `as:` Asana, `td:` Todoist, etc. |
+| E | `project_name` | string | `Client XYZ` | Resolved via the `/projects` lookup map |
+| F | `task_id` | string | `td:8284945872` | Everhour task ID. Same prefix scheme as `project_id` |
+| G | `task_name` | string | `Design mockups` | From the task object nested in the time record |
+| H | `duration_seconds` | integer | `3600` | Raw `time` field from the API |
+| I | `duration_minutes` | integer | `60` | Computed: round(seconds / 60) |
+| J | `duration_hours` | decimal | `1.00` | Computed: seconds / 3600 (2 dp) |
+| K | `billable` | boolean | `TRUE` | From `billing.billable` if available, else inferred from `task.unbillable` (default `TRUE`) |
+| L | `billable_rate` | decimal | `85.00` | Dollars/hour. Only populated when `opts_include_billing=1` is accepted (admin-only); blank otherwise |
+| M | `notes` | string | `Initial wireframes` | Entry comment |
+| N | `synced_at` | ISO 8601 | `2026-05-23T23:45:00Z` | When the sync script ran |
+| O | `todoist_task_id` | string | `8284945872` | Todoist task ID with the `td:` prefix stripped — direct equality join key against `quantified-self-todoist!Completions.task_id`. Blank for non-Todoist tasks. |
 
 **Header row:**
 ```
-entry_id	date	user_id	project_id	project_name	task_id	task_name	duration_seconds	duration_hours	billable	billable_rate	notes	synced_at
+entry_id	date	user_id	project_id	project_name	task_id	task_name	duration_seconds	duration_minutes	duration_hours	billable	billable_rate	notes	synced_at	todoist_task_id
 ```
 
 ---
@@ -71,7 +73,7 @@ Set these in the Apps Script project (**Project Settings → Script Properties**
 | `EVERHOUR_API_KEY` | API key from Everhour → My Profile → Settings → Application Access |
 | `EVERHOUR_SPREADSHEET_ID` | ID from the Google Sheets URL |
 
-Everhour API base URL: `https://api.everhour.com/v1`  
+Everhour API base URL: `https://api.everhour.com` (no version prefix; endpoints are `/projects`, `/team/time`, etc.)  
 Rate limit: ~20 requests per 10 seconds — the sync script handles this automatically via `RateLimiter`.
 
 ---
@@ -81,3 +83,4 @@ Rate limit: ~20 requests per 10 seconds — the sync script handles this automat
 - `DailySummary.date` is the recommended join key when blending with other sheets in Looker Studio
 - Create a Looker Studio scorecard for `billable_pct` as a rolling 7-day average to track billing efficiency
 - Blend `DailySummary` with `quantified-self-log` focus blocks (`event_type = focus_end`) on `date` to compare logged focus time vs billed time
+- **Join to Todoist:** blend `TimeEntries.todoist_task_id` with `quantified-self-todoist!Completions.task_id` to see actual time tracked per completed task (only rows where the Everhour task came from the Todoist integration will match)
