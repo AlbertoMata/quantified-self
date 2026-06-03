@@ -1,0 +1,28 @@
+{
+  "name": "quantified-self",
+  "version": "1.0.0",
+  "description": "Personal daily event and habit tracker with minimal interaction — built around Apple Watch, AirPods, Apple Shortcuts, Todoist, and Everhour. Centralized view in Obsidian.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "format": "prettier --write --parser babel \"**/*.gs\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlbertoMata/quantified-self.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AlbertoMata/quantified-self/issues"
+  },
+  "homepage": "https://github.com/AlbertoMata/quantified-self#readme",
+  "devDependencies": {
+    "prettier": "^3.8.3"
+  }
+}
