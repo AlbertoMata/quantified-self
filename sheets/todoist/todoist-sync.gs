@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Todoist Sync — quantified-self-sync (standalone Apps Script project)
+// Todoist Sync — Main Orchestrator
 //
 // Uses the Todoist UNIFIED API v1 (api.todoist.com/api/v1). The old REST v2 and
 // Sync v9 APIs were deprecated and shut down in early 2026 — calling /rest/v2/*
@@ -19,6 +19,12 @@
 
 const TODOIST_BASE = "https://api.todoist.com/api/v1";
 
+// ── Configuration ──────────────────────────────────────────────────────────
+const TARGET_PROJECTS = ["Fullsteam", "Ascensus", "Work"];
+const IN_REVIEW_SECTION_NAME = "In Review";
+const CACHE_DURATION_HOURS = 6;
+const MAX_COMPLETED_SPAN_MS = 90 * 86400000;
+
 // ── Secrets ─────────────────────────────────────────────────────────────────
 // Read once from Script Properties so the real values never live in this file.
 // Top-level code runs on every execution in this shared project (including
@@ -29,9 +35,6 @@ const TODOIST_SPREADSHEET_ID =
 	PropertiesService.getScriptProperties().getProperty(
 		"TODOIST_SPREADSHEET_ID",
 	);
-
-// Completed-tasks window cannot exceed ~3 months per request; clamp the cursor.
-const MAX_COMPLETED_SPAN_MS = 90 * 86400000;
 
 // Entry point — called by the daily time trigger
 function syncTodoist() {
@@ -61,90 +64,6 @@ function syncTodoist() {
 		throw new Error(
 			"Some Todoist steps failed → " + errors.join(" | "),
 		);
-}
-
-// ── Completions ───────────────────────────────────────────────────────────────
-
-function syncCompletions() {
-	const ss = SpreadsheetApp.openById(TODOIST_SPREADSHEET_ID);
-	const sheet = ss.getSheetByName("Completions");
-
-	// Window: usually [last sync → now], clamped to the API's ~3-month max span.
-	// Exception: if the sheet is empty (e.g. you manually cleared rows to re-backfill),
-	// ignore the cursor and pull the full 90-day window so the sheet refills itself.
-	const sheetIsEmpty = sheet.getLastRow() < 2;
-	let sinceDate = sheetIsEmpty
-		? new Date(Date.now() - MAX_COMPLETED_SPAN_MS)
-		: new Date(getLastSyncTime());
-	if (Date.now() - sinceDate.getTime() > MAX_COMPLETED_SPAN_MS) {
-		sinceDate = new Date(Date.now() - MAX_COMPLETED_SPAN_MS);
-	}
-	const until = new Date();
-	Logger.log(
-		`Completions: window ${toTodoistDateTime(sinceDate)} → ${toTodoistDateTime(until)}` +
-			(sheetIsEmpty
-				? " (auto-backfill: sheet was empty)"
-				: ""),
-	);
-
-	const projectMap = getProjectMap();
-	const sectionMap = getSectionMap();
-	const existingKeys = getExistingCompletionKeys(sheet);
-
-	// Single source: the /activities log. It returns EVERY completion — recurring
-	// check-offs (which /tasks/completed never returns) AND one-off tasks — and reaches
-	// further back than the completed-tasks endpoint's 90-day window. We deliberately do
-	// NOT also query /tasks/completed: the same completion appears in both with
-	// timestamps ~1s apart (completed_at vs event_date), which would defeat the
-	// task_id|completed_at dedup key and produce duplicate rows on a full backfill.
-	// Trade-off: activity events don't carry task duration, so duration_minutes stays blank.
-	// Note: /activities ignores since/until (server-side), so this is always full history;
-	// the existing-rows dedup below is what keeps each daily run incremental.
-	const allTasks = fetchActivityCompletions(sinceDate, until);
-	Logger.log(
-		`Completions: ${allTasks.length} activity completion events`,
-	);
-
-	const rows = allTasks
-		// Require a task_id — completions we can't tie to a task are dropped, not stored.
-		.filter(
-			(t) =>
-				t.id &&
-				!existingKeys.has(
-					`${String(t.id)}|${t.completed_at || ""}`,
-				),
-		)
-		.map((t) => [
-			t.completed_at || until.toISOString(),
-			String(t.id),
-			t.content || "",
-			t.project_id ? String(t.project_id) : "",
-			projectMap[String(t.project_id)] || "",
-			t.section_id
-				? sectionMap[String(t.section_id)] || ""
-				: "",
-			(t.labels || []).join(","),
-			t.priority || 1,
-			t.due && t.due.is_recurring ? "TRUE" : "FALSE",
-			t.due ? t.due.date : "",
-			durationMinutes(t.duration),
-			toDateString(new Date()),
-			t.parent_id || t.parentId || "", // self-blend key: parent_id ↔ task_id
-		]);
-
-	if (rows.length > 0) {
-		sheet.getRange(
-			sheet.getLastRow() + 1,
-			1,
-			rows.length,
-			rows[0].length,
-		).setValues(rows);
-	}
-
-	setLastSyncTime(until.toISOString());
-	Logger.log(
-		`Completions: ${allTasks.length} activity events, appended ${rows.length} new rows`,
-	);
 }
 
 // ── Overdue ───────────────────────────────────────────────────────────────────
@@ -343,287 +262,6 @@ function syncRecurringStatus() {
 	Logger.log(`RecurringStatus: wrote ${rows.length} rows for ${today}`);
 }
 
-// ── Activity completions (recurring check-offs) ───────────────────────────────
-
-// GET /api/v1/activities with event_type=completed returns all task completion events,
-// including recurring check-offs that /tasks/completed never sees.
-// Endpoint and event_type confirmed from v1 API docs + live testing.
-function fetchActivityCompletions(sinceDate, until) {
-	try {
-		const events = todoistGetPaged("/activities", {
-			object_type: "item",
-			event_type: "completed",
-			since: toTodoistDateTime(sinceDate),
-			until: toTodoistDateTime(until),
-		});
-		Logger.log(`/activities: ${events.length} completion events`);
-		return normaliseActivityEvents(events);
-	} catch (e) {
-		Logger.log(`/activities failed: ${e}`);
-		return [];
-	}
-}
-
-// Normalise activity log events to the shape expected by the syncCompletions row mapper.
-// The raw /activities response uses snake_case (object_id, extra_data, …); camelCase
-// fallbacks are kept as insurance in case the API representation shifts.
-function normaliseActivityEvents(events) {
-	return (
-		events
-			// Keep only task-completion events that still carry an identifiable id.
-			// Records without an object_id can't be tied to a task → skip (no junk rows).
-			.filter((e) => {
-				const type = e.object_type || e.objectType;
-				return (
-					type === "item" &&
-					(e.object_id || e.objectId)
-				);
-			})
-			.map((e) => {
-				const ex = e.extra_data || e.extraData || {};
-				const isRecurring =
-					ex.is_recurring != null
-						? ex.is_recurring
-						: ex.isRecurring;
-				return {
-					id: e.object_id || e.objectId,
-					completed_at:
-						e.event_date ||
-						e.eventDate ||
-						"",
-					content: ex.content || "",
-					// Activity events carry the project at the TOP level (parent_project_id),
-					// NOT inside extra_data — without this the project columns come out blank.
-					project_id:
-						e.parent_project_id ||
-						e.parentProjectId ||
-						ex.project_id ||
-						null,
-					section_id:
-						ex.section_id ||
-						ex.sectionId ||
-						null,
-					labels: Array.isArray(ex.labels)
-						? ex.labels
-						: [],
-					priority: ex.priority || 1,
-					due:
-						isRecurring != null
-							? {
-									is_recurring:
-										isRecurring,
-									date:
-										ex.due_date ||
-										ex.dueDate ||
-										"",
-								}
-							: null,
-					duration: ex.duration || null,
-					parent_id:
-						e.parent_id ||
-						ex.parent_id ||
-						ex.parentId ||
-						null,
-				};
-			})
-	);
-}
-
-// ── HTTP helpers ──────────────────────────────────────────────────────────────
-
-// GET that throws a *legible* error when the response isn't JSON (e.g. an HTML or
-// plain-text deprecation notice), instead of a cryptic "Unexpected token" from
-// JSON.parse. This is what turns a silent failure into a debuggable message.
-function todoistGet(path, params) {
-	const qs = buildQuery(params);
-	const response = UrlFetchApp.fetch(`${TODOIST_BASE}${path}${qs}`, {
-		headers: { Authorization: `Bearer ${TODOIST_TOKEN}` },
-		muteHttpExceptions: true,
-	});
-	const code = response.getResponseCode();
-	const body = response.getContentText();
-	if (code >= 300) {
-		throw new Error(
-			`Todoist GET ${path} → HTTP ${code}: ${body.slice(0, 200)}`,
-		);
-	}
-	const trimmed = (body || "").trim();
-	if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
-		throw new Error(
-			`Todoist GET ${path} returned non-JSON: ${trimmed.slice(0, 200)}`,
-		);
-	}
-	return JSON.parse(trimmed);
-}
-
-// Follows v1 cursor pagination: list endpoints return { results: [...], next_cursor }.
-// Falls back to { items } or a bare array for endpoints that differ.
-// limit=50 is the safe per-page cap; the completed-tasks endpoint silently clamps
-// higher values on some accounts, which causes pages to look complete when they aren't.
-function todoistGetPaged(path, params) {
-	let all = [];
-	let cursor = null;
-	let guard = 0;
-	do {
-		const page = todoistGet(path, {
-			...(params || {}),
-			cursor,
-			limit: 50,
-		});
-		if (Array.isArray(page)) return all.concat(page); // non-paginated endpoint
-		const batch = page.results || page.items || [];
-		all = all.concat(batch);
-		cursor = page.next_cursor || null;
-		Logger.log(
-			`${path} page ${guard + 1}: got ${batch.length} items (total so far: ${all.length}), has_more=${!!cursor}`,
-		);
-		// Stop if the page was empty — some endpoints return has_more=true with an
-		// empty batch indefinitely until the caller stops (observed on /activities).
-		if (batch.length === 0) break;
-		if (cursor) Utilities.sleep(300); // courtesy delay between pages
-	} while (cursor && ++guard < 50);
-	return all;
-}
-
-// Productivity stats endpoint moved in v1; try the known candidates and use the
-// first that returns JSON (testTodoist() logs which one works for your account).
-function fetchTodoistStats() {
-	const candidates = ["/tasks/completed/stats", "/user/stats"];
-	let lastErr;
-	for (const p of candidates) {
-		try {
-			const s = todoistGet(p);
-			Logger.log(`Stats endpoint OK: ${p}`);
-			return s;
-		} catch (e) {
-			lastErr = e;
-			Logger.log(`Stats endpoint ${p} failed: ${e}`);
-		}
-	}
-	throw new Error(
-		`No working Todoist stats endpoint (${candidates.join(", ")}). Last: ${lastErr}`,
-	);
-}
-
-// ── Lookups (cached 6h) ─────────────────────────────────────────────────────
-
-function getProjectMap() {
-	return cachedIdNameMap("TODOIST_PROJECT_MAP", "/projects");
-}
-
-function getSectionMap() {
-	return cachedIdNameMap("TODOIST_SECTION_MAP", "/sections");
-}
-
-function cachedIdNameMap(cacheKey, path) {
-	const cache = CacheService.getScriptCache();
-	const cached = cache.get(cacheKey);
-	if (cached) return JSON.parse(cached);
-
-	const items = todoistGetPaged(path);
-	const map = {};
-	items.forEach((i) => {
-		map[String(i.id)] = i.name;
-	});
-	cache.put(cacheKey, JSON.stringify(map), 21600); // 6h
-	return map;
-}
-
-// ── Small helpers ─────────────────────────────────────────────────────────────
-
-// Build a query string, dropping empty/null params (so cursor=null is omitted).
-function buildQuery(params) {
-	if (!params) return "";
-	const pairs = Object.entries(params)
-		.filter(([, v]) => v !== undefined && v !== null && v !== "")
-		.map(
-			([k, v]) =>
-				`${encodeURIComponent(k)}=${encodeURIComponent(v)}`,
-		);
-	return pairs.length ? "?" + pairs.join("&") : "";
-}
-
-// Todoist datetimes are YYYY-MM-DDTHH:MM:SS (no milliseconds / trailing Z).
-function toTodoistDateTime(date) {
-	return date.toISOString().slice(0, 19);
-}
-
-// Convert a Todoist duration object {amount, unit} → whole minutes (or "").
-function durationMinutes(duration) {
-	if (!duration || !duration.amount) return "";
-	return Math.round(
-		duration.amount * (duration.unit === "hour" ? 60 : 1),
-	);
-}
-
-function num(v) {
-	const n = Number(v);
-	return isNaN(n) ? 0 : n;
-}
-
-// Read a column (1-indexed) from a sheet into a Set for O(1) dedup lookups
-function getExistingIds(sheet, columnIndex) {
-	const lastRow = sheet.getLastRow();
-	if (lastRow < 2) return new Set();
-	const values = sheet
-		.getRange(2, columnIndex, lastRow - 1, 1)
-		.getValues();
-	return new Set(values.map((r) => String(r[0])));
-}
-
-// Composite dedup key for Completions: "task_id|completed_at".
-// Recurring tasks reuse the same task_id each time they're checked off — only the
-// completion timestamp differs. A task_id-only Set would drop every completion after
-// the first, making recurring task history invisible in the sheet.
-function getExistingCompletionKeys(sheet) {
-	const lastRow = sheet.getLastRow();
-	if (lastRow < 2) return new Set();
-	const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // cols A (completed_at) & B (task_id)
-	return new Set(values.map((r) => `${String(r[1])}|${String(r[0])}`));
-}
-
-// Sync cursor stored in Script Properties
-function getLastSyncTime() {
-	return (
-		PropertiesService.getScriptProperties().getProperty(
-			"TODOIST_LAST_SYNC",
-		) || "2000-01-01T00:00:00Z"
-	);
-}
-
-function setLastSyncTime(isoTimestamp) {
-	PropertiesService.getScriptProperties().setProperty(
-		"TODOIST_LAST_SYNC",
-		isoTimestamp,
-	);
-}
-
-// Manual override: clear the sync cursor so the next syncCompletions() pulls the
-// full 90-day window. Use this if you want a re-backfill without clearing the
-// Completions sheet (the empty-sheet auto-backfill handles the clear-sheet case).
-function resetTodoistCursor() {
-	PropertiesService.getScriptProperties().deleteProperty(
-		"TODOIST_LAST_SYNC",
-	);
-	Logger.log(
-		"TODOIST_LAST_SYNC cleared. Next syncCompletions() will pull the last 90 days.",
-	);
-}
-
-// Format a Date as YYYY-MM-DD
-function toDateString(date) {
-	return date.toISOString().split("T")[0];
-}
-
-// Normalise a sheet cell value to a YYYY-MM-DD key for comparison.
-// Sheets returns a Date object (not a string) once a cell is date-formatted, so
-// raw === comparisons against "2026-05-26" silently miss. This helper handles
-// both shapes uniformly.
-function dateKey(cellValue) {
-	if (cellValue instanceof Date) return toDateString(cellValue);
-	return String(cellValue || "");
-}
-
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 // Run this once from the editor after setting the Script Properties. It hits each
 // endpoint with limit=1 and logs the response shape, so you can confirm the v1
@@ -661,7 +299,6 @@ function testTodoist() {
 				{
 					since: toTodoistDateTime(weekAgo),
 					until: toTodoistDateTime(new Date()),
-					annotate_items: true,
 				},
 			);
 			const projectMap = getProjectMap();
@@ -741,6 +378,75 @@ function testTodoist() {
 				return `${events.length} events`;
 			},
 		);
+	});
+
+	probe(
+		"GET /activities event_type=updated (section movements, last 7 days)",
+		() => {
+			const events = todoistGetPaged("/activities", {
+				object_type: "item",
+				event_type: "updated",
+				since: toTodoistDateTime(weekAgo),
+				until: toTodoistDateTime(new Date()),
+			});
+			if (events.length > 0) {
+				Logger.log(
+					"Updated event keys: " +
+						JSON.stringify(
+							Object.keys(events[0]),
+						),
+				);
+				if (events[0].extra_data)
+					Logger.log(
+						"extra_data keys: " +
+							JSON.stringify(
+								Object.keys(
+									events[0]
+										.extra_data,
+								),
+							),
+					);
+				Logger.log(
+					"extra_data.section_id: " +
+						events[0].extra_data
+							?.section_id,
+				);
+				Logger.log(
+					"Sample: " + JSON.stringify(events[0]),
+				);
+			}
+			return `${events.length} updated events`;
+		},
+	);
+
+	// Test complexity extraction on sample tasks
+	probe("Complexity extraction test (tasks with numeric labels)", () => {
+		const allTasks = todoistGetPaged("/tasks/filter", {
+			query: "all & label",
+			limit: 10,
+		});
+		const tasksWithComplexity = allTasks
+			.filter((t) => t.labels && t.labels.length > 0)
+			.map((t) => ({
+				id: t.id,
+				content: t.content,
+				labels: t.labels,
+				extracted_complexity: extractComplexity(
+					t.labels,
+				),
+			}));
+		if (tasksWithComplexity.length > 0) {
+			Logger.log(
+				"Sample tasks with complexity: " +
+					JSON.stringify(
+						tasksWithComplexity.slice(0, 3),
+					),
+			);
+		}
+		const withComplexity = tasksWithComplexity.filter(
+			(t) => t.extracted_complexity != null,
+		);
+		return `${tasksWithComplexity.length} tasks checked, ${withComplexity.length} with numeric complexity`;
 	});
 
 	probe("stats", fetchTodoistStats);
