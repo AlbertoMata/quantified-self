@@ -29,6 +29,37 @@ function todoistGet(path, params) {
 	return JSON.parse(trimmed);
 }
 
+// POST to the v1 Sync endpoint with item_update (and similar) commands. Writes aren't
+// used by the read-only sync jobs, but this lives here so all HTTP stays in one file.
+// Returns the parsed response; logs (but does not throw on) per-command failures so a
+// partial batch is visible rather than silent.
+function todoistSync(commands) {
+	if (!commands || commands.length === 0) return { ok: true, empty: true };
+	const response = UrlFetchApp.fetch(`${TODOIST_BASE}/sync`, {
+		method: "post",
+		contentType: "application/json",
+		headers: { Authorization: `Bearer ${TODOIST_TOKEN}` },
+		payload: JSON.stringify({ commands }),
+		muteHttpExceptions: true,
+	});
+	const code = response.getResponseCode();
+	const body = response.getContentText();
+	if (code >= 300) {
+		throw new Error(`Todoist sync → HTTP ${code}: ${body.slice(0, 300)}`);
+	}
+	const parsed = JSON.parse(body);
+	// sync_status maps each command uuid → "ok" or an error object; surface failures.
+	const failures = Object.entries(parsed.sync_status || {}).filter(
+		([, v]) => v !== "ok",
+	);
+	if (failures.length) {
+		Logger.log(
+			`todoistSync: ${failures.length} command(s) failed: ${JSON.stringify(failures)}`,
+		);
+	}
+	return parsed;
+}
+
 // Follows v1 cursor pagination: list endpoints return { results: [...], next_cursor }.
 // Falls back to { items } or a bare array for endpoints that differ.
 // limit=50 is the safe per-page cap; the completed-tasks endpoint silently clamps

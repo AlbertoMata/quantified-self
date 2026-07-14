@@ -10,14 +10,14 @@ End-to-end view of all data sources, sync layers, storage, and analytics.
 flowchart TD
     subgraph Capture["Data Capture"]
         SC["Apple Shortcuts\nMood · Focus · Events"]
-        AW["Apple Watch\nHealth Auto Export"]
-        TD["Todoist\nREST API v2"]
+        AW["Apple Health / Watch\nHealth Sync shortcut"]
+        TD["Todoist\nAPI v1"]
         EH["Everhour\nREST API"]
     end
 
     subgraph Sync["Sync Layer"]
         WH["Apps Script Webhook\napps-script.gs\n(push — always on)"]
-        HAE["Health Auto Export\napp — writes directly\n(daily 06:00)"]
+        HW["Apps Script Webhook\nhealth-webhook.gs\n(push — nightly 23:55)"]
         GAS["Apps Script Sync\ntodoist-sync.gs\neverhour-sync.gs\n(nightly trigger)"]
     end
 
@@ -34,7 +34,7 @@ flowchart TD
     end
 
     SC -->|POST JSON| WH --> SL
-    AW -->|daily export| HAE --> SH
+    AW -->|nightly POST JSON| HW --> SH
     GAS -->|pull & upsert| TD
     GAS -->|pull & upsert| EH
     GAS --> ST
