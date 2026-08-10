@@ -8,7 +8,15 @@
 //        Recurring check-offs NEVER appear here (verified live: the Habits project
 //        returns 0 rows even on days it was checked off).
 //   2. Recurring check-offs → /activities, event_type=completed, filtered to is_recurring
-//        These carry their labels inside extra_data, so they're complete on their own.
+//        extra_data carries content, labels, parent_id, priority and the recurrence flag
+//        (verified live on habit check-offs), so these events are essentially complete on
+//        their own. Two exceptions worth knowing:
+//          - the PROJECT is at the top level as parent_project_id, not in extra_data;
+//          - due_date is already the NEXT occurrence — the completed one is
+//            completed_due_date (see normaliseActivityEvents).
+//        Labels are omitted entirely for a task that has none, so enrichFromLiveTask()
+//        stands by as a fallback for anything an event leaves out. It is a guard, not the
+//        primary path: in normal operation it changes nothing.
 //
 // Because the two sets are disjoint by construction, the same completion can't appear
 // twice, so labels/complexity populate for BOTH task types without a fragile task_id
@@ -20,6 +28,7 @@
 function syncCompletions() {
 	const ss = SpreadsheetApp.openById(TODOIST_SPREADSHEET_ID);
 	const sheet = ss.getSheetByName("Completions");
+	_liveTaskMap = null; // drop last run's snapshot if this is a repeat call in one execution
 
 	// Window: usually [last sync → now], clamped to the API's ~3-month max span.
 	// Exception: if the sheet is empty (e.g. you manually cleared rows to re-backfill),
@@ -209,6 +218,50 @@ function fetchRecurringCompletions(sinceDate, until) {
 	}
 }
 
+// Open tasks indexed by id, built once per run and reused across every activity event.
+// Not cached across runs (CacheService caps a value at 100KB, which a full task list can
+// exceed) and not fetched at all unless an activity event actually needs enriching.
+let _liveTaskMap = null;
+
+// Backfill the fields the activity log leaves out, from the task as it exists right now.
+// This is sound specifically BECAUSE these are recurring: checking one off rolls it to its
+// next occurrence rather than removing it, so the task is still there to be read. It would
+// NOT be sound for one-off completions — those are gone from /tasks — but those come from
+// /tasks/completed with full objects already.
+//
+// Returns {} when the task can't be found (deleted or made non-recurring since the event,
+// or the fetch failed), so every caller degrades to the event's own fields.
+function enrichFromLiveTask(taskId) {
+	if (_liveTaskMap === null) {
+		_liveTaskMap = {};
+		try {
+			todoistGetPaged("/tasks").forEach((t) => {
+				_liveTaskMap[String(t.id)] = {
+					labels: Array.isArray(t.labels)
+						? t.labels
+						: [],
+					parent_id:
+						t.parent_id || t.parentId || null,
+					section_id:
+						t.section_id || t.sectionId || null,
+					project_id:
+						t.project_id || t.projectId || null,
+					priority: t.priority || 1,
+				};
+			});
+			Logger.log(
+				`Live task map: ${Object.keys(_liveTaskMap).length} open tasks for activity enrichment`,
+			);
+		} catch (err) {
+			// Enrichment is best-effort: a failed fetch must not sink the whole sync.
+			Logger.log(
+				`Live task map failed — recurring rows keep only the fields the activity log provided: ${err}`,
+			);
+		}
+	}
+	return _liveTaskMap[String(taskId)] || {};
+}
+
 // Normalise activity log events to the shape expected by the syncCompletions row mapper.
 // The raw /activities response uses snake_case (object_id, extra_data, …); camelCase
 // fallbacks are kept as insurance in case the API representation shifts.
@@ -226,12 +279,28 @@ function normaliseActivityEvents(events) {
 			})
 			.map((e) => {
 				const ex = e.extra_data || e.extraData || {};
+				const id = e.object_id || e.objectId;
 				const isRecurring =
 					ex.is_recurring != null
 						? ex.is_recurring
 						: ex.isRecurring;
+				// What the event itself provides. Both of these are routinely absent from
+				// extra_data, which is why enrichFromLiveTask() exists — an empty labels
+				// cell is not cosmetic here, it silently zeroes the habit count.
+				const eventLabels = Array.isArray(ex.labels)
+					? ex.labels
+					: [];
+				// The parent task is `parent_item_id` at the TOP level — the same shape as
+				// parent_project_id below, NOT `parent_id` inside extra_data.
+				const eventParentId =
+					e.parent_item_id ||
+					e.parentItemId ||
+					ex.parent_id ||
+					ex.parentId ||
+					null;
+				const live = enrichFromLiveTask(id);
 				return {
-					id: e.object_id || e.objectId,
+					id: id,
 					completed_at:
 						e.event_date ||
 						e.eventDate ||
@@ -243,32 +312,39 @@ function normaliseActivityEvents(events) {
 						e.parent_project_id ||
 						e.parentProjectId ||
 						ex.project_id ||
+						live.project_id ||
 						null,
 					section_id:
 						ex.section_id ||
 						ex.sectionId ||
+						live.section_id ||
 						null,
-					labels: Array.isArray(ex.labels)
-						? ex.labels
-						: [],
-					priority: ex.priority || 1,
+					labels: eventLabels.length
+						? eventLabels
+						: live.labels || [],
+					priority: ex.priority || live.priority || 1,
 					due:
 						isRecurring != null
 							? {
 									is_recurring:
 										isRecurring,
+									// The occurrence that was COMPLETED — not the one it rolled
+									// on to. By the time the event is written, extra_data.due_date
+									// is ALREADY the next occurrence (verified live: a habit checked
+									// off on Aug 10 carries due_date=Aug 11, completed_due_date=Aug 10).
+									// Using due_date dates every recurring completion one occurrence
+									// into the future, which silently breaks the streak reconstruction
+									// that column J exists for.
 									date:
+										ex.completed_due_date ||
+										ex.completedDueDate ||
 										ex.due_date ||
 										ex.dueDate ||
 										"",
 								}
 							: null,
 					duration: ex.duration || null,
-					parent_id:
-						e.parent_id ||
-						ex.parent_id ||
-						ex.parentId ||
-						null,
+					parent_id: eventParentId || live.parent_id || null,
 				};
 			})
 	);

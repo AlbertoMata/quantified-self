@@ -93,9 +93,17 @@ function doGet(e) {
   const healthData = healthSS.getSheetByName("Health").getDataRange().getValues();
   const healthRow = healthData.find(r => r[0] === date) || [];
 
-  // Habits from Todoist Completions
+  // Habits from Todoist Completions. A habit is a recurring completion explicitly tagged
+  // `habits` — a positive filter, so anything untagged fails to count instead of silently
+  // inflating the total. Checklist steps are undated subtasks that Todoist resets when the
+  // parent recurs, so they are not recurring and cannot land here anyway; the label test is
+  // the guard for the day someone gives one a recurrence.
+  // Exact token match matters here: `sub-habits` contains "habits" as a substring.
   const completionsData = todoSS.getSheetByName("Completions").getDataRange().getValues();
-  const habitsForDate = completionsData.filter(r => r[0].toString().startsWith(date) && r[8] === "TRUE");
+  const habitsForDate = completionsData.filter(r =>
+    r[0].toString().startsWith(date) &&
+    r[8] === "TRUE" &&
+    r[6].toString().split(",").map(s => s.trim()).indexOf("habits") !== -1);
 
   // Hours from Everhour DailySummary
   const ehData = ehSS.getSheetByName("DailySummary").getDataRange().getValues();

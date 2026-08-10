@@ -9,9 +9,10 @@ Three tabs, each capturing a different shape of Todoist data.
 
 ## Tab 1: `Completions`
 
-One row per completed task (both one-off and recurring). The `is_recurring` flag distinguishes habits from one-off work.
+One row per completed task (both one-off and recurring). The `is_recurring` flag distinguishes recurring work from one-off work. A tracked habit is `is_recurring = TRUE` **and** carries the `habits` label; the checklist steps under a habit are undated, non-recurring subtasks carrying `sub-habits`. See Tips.
 
 **Event sources**: Captures completions from three sources:
+
 1. One-off completions — `/tasks/completed/by_completion_date`, which returns full task objects (labels, project, section, due, duration, parent). Recurring tasks never appear here.
 2. Recurring check-offs — activity log (`/activities`, `event_type=completed`) filtered to `is_recurring`; these carry their labels in `extra_data`.
 3. Tasks currently in an "In Review" section of a target project (Fullsteam, Ascensus, Work) — treated as PR/story ready state.
@@ -34,7 +35,7 @@ Sources 1 and 2 are **disjoint by construction** (a task is either recurring or 
 | G | `labels` | string | `habit,health` | Comma-separated label names, carried directly by each source |
 | H | `priority` | integer 1–4 | `2` | 1=normal, 4=urgent |
 | I | `is_recurring` | boolean | `TRUE` | TRUE if task has a recurrence rule |
-| J | `due_date` | YYYY-MM-DD | `2026-05-23` | Original due date (for streak tracking) |
+| J | `due_date` | YYYY-MM-DD | `2026-05-23` | The occurrence that was completed, for streak tracking. For recurring rows this comes from the event's `completed_due_date`: its `due_date` has already advanced to the NEXT occurrence by the time the event is written, so reading that instead dates every habit completion a day (or a workday) into the future |
 | K | `duration_minutes` | integer | `30` | Task duration if set; empty otherwise |
 | L | `sync_date` | YYYY-MM-DD | `2026-05-23` | Date the sync script ran |
 | M | `parent_id` | string | `8284123456` | Todoist parent task ID; empty for top-level tasks. Self-blend on `parent_id ↔ task_id` to attach parent details |
@@ -50,6 +51,8 @@ completed_at	task_id	task_content	project_id	project_name	section_name	labels	pr
 ## Tab 2: `Overdue`
 
 Daily snapshot of tasks that were due but not completed. The sync script **replaces** today's rows on each run (not appended) — overdue is a state, not an event log.
+
+**Note on habit steps**: `sub-habits` are deliberately undated, so they never appear here — a skipped routine costs exactly one row, for the parent habit. If steps ever start showing up, someone has given them a due date; that is the bug, not this tab.
 
 **Strategy**: full daily replace — delete all rows where `snapshot_date = today`, then write fresh.
 
@@ -109,7 +112,10 @@ Set these in the Apps Script project (**Project Settings → Script Properties**
 
 ## Tips
 
-- Filter `Completions` to `is_recurring = TRUE` in Looker Studio for a pure habits view
+- **Habit count:** filter `Completions` to `is_recurring = TRUE` **and** `labels` containing the `habits` token. The label is what makes it a habit; recurrence alone is not enough, since any recurring task qualifies. Match the token exactly when filtering: `sub-habits` contains `habits` as a substring, so a naive "contains" test would sweep steps back in
+- The taxonomy is applied at capture time, not derived in code: `habits` marks the tracked unit, `sub-habits` marks a step inside one. A new recurring task with neither label simply does not count until tagged — a visible undercount, rather than the invisible inflation an exclusion list would produce
+- **Adding a step to a habit**: give it the `sub-habits` label and leave it **undated and non-recurring**. Todoist unchecks a recurring parent's subtasks when the parent recurs (the `sub_tasks_reset` field on the completion event counts them), so a step resets daily on its own. Giving a step its own recurrence is the tempting mistake: it does not improve the reset, and it turns every step into a recurring completion that inflates the habit count, a daily row in `RecurringStatus`, and an `Overdue` row whenever the routine slips. Never copy the parent's `habits` or `✅_streak`/`❌_streak` labels onto a step
+- **What a step's completion looks like:** a step checked off is a one-off completion (`is_recurring = FALSE`) until the parent recurs and unchecks it. Whether that row survives the reset is unverified — an uncomplete may retract it from the completed-tasks endpoint. Do not build step-level streaks on this tab without checking first
 - Filter `section_name = "In Review"` to track story/PR completions separately from task completions
 - Use `complexity` to aggregate story points completed per sprint/period — join with time data for velocity tracking
 - Join `KarmaStats` with the `Health` sheet on `date` to correlate productivity with sleep/HRV

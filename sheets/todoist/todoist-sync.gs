@@ -194,12 +194,22 @@ function syncKarmaStats() {
 
 // ── Recurring Status (snapshot approach for recurring task completions) ───────
 //
-// The Todoist v1 API has no activity log — recurring task check-offs are never
-// returned by /tasks/completed. This function works around that by taking a daily
-// snapshot of every active recurring task and its current due_date. When a task's
-// due_date advances between consecutive daily snapshots, it was completed on the
-// earlier date. Looker Studio can reconstruct the completion timeline by comparing
-// consecutive rows for the same task_id.
+// Daily snapshot of every active recurring task and its current due_date. When a task's
+// due_date advances between consecutive daily snapshots, it was completed on the earlier
+// date. Looker Studio can reconstruct the completion timeline by comparing consecutive
+// rows for the same task_id.
+//
+// NOTE: this predates the activity-log source in todoist-sync-completions.gs, which was
+// written around the belief that v1 had no activity log. It does — /activities returns
+// recurring check-offs directly, and Completions now records them as events. This tab is
+// therefore a redundant SECOND view of the same behaviour, kept because a snapshot degrades
+// differently from an event stream: it still shows state if /activities is unavailable, but
+// it cannot see two completions of the same task between runs. Prefer Completions for
+// counting; use this to reconstruct state on days the event source came back empty.
+//
+// Sub-habits (checklist steps under a habit) are undated and non-recurring by design —
+// Todoist unchecks them when their parent recurs — so they never reach this tab. A step
+// appearing here means it was given a recurrence it should not have.
 //
 // Sheet layout (RecurringStatus):
 //   A: snapshot_date  B: task_id  C: content  D: project_name  E: section_name

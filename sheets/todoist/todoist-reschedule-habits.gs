@@ -70,19 +70,73 @@ function rescheduleHabitSection(plainName) {
 	const tasks = todoistGetPaged("/tasks", { section_id: String(section.id) });
 	const now = new Date();
 
-	// Only tasks that are genuinely skipped — see isStale().
-	const stale = tasks.filter((t) => isStale(t, now));
+	// A habit and its sub-habits move as ONE unit. Judged individually they go stale on
+	// different clocks — a parent due 07:50 is bumped once the grace window passes, while
+	// its date-only steps aren't stale until the day itself flips. The steps would then sit
+	// a day behind the routine they belong to and read as skipped in that night's Overdue
+	// snapshot. So the parent decides, and its steps follow it.
+	const byId = {};
+	tasks.forEach((t) => {
+		byId[String(t.id)] = t;
+	});
+	const parentIdOf = (t) => String(t.parent_id || t.parentId || "");
 
-	const commands = stale.map((t) => ({
-		type: "item_update",
-		uuid: Utilities.getUuid(),
-		args: { id: String(t.id), due: nextOccurrenceDue(t) },
-	}));
+	const stepsByParent = {};
+	tasks.filter((t) => parentIdOf(t) !== "").forEach((t) => {
+		const p = parentIdOf(t);
+		(stepsByParent[p] = stepsByParent[p] || []).push(t);
+	});
+
+	// Top-level tasks decide for themselves. So do steps whose parent lives outside this
+	// section — nothing here can judge them, and stranding them on a stale date would be
+	// worse than the old per-task behaviour.
+	const leaders = tasks.filter(
+		(t) => parentIdOf(t) === "" || !byId[parentIdOf(t)],
+	);
+
+	const commands = [];
+	leaders.filter((t) => isStale(t, now)).forEach((t) => {
+		const due = nextOccurrenceDue(t);
+		commands.push(updateCommand(t, due));
+		// Steps take the parent's target DATE but keep their own recurring string, so one
+		// that repeats "every workday" stays a workday task while landing on the same day
+		// as its routine. Undated steps are left alone — they were never scheduled, and
+		// giving them a date here would silently opt them into the Overdue snapshot.
+		(stepsByParent[String(t.id)] || [])
+			.filter((s) => s.due && s.due.date)
+			.forEach((s) => {
+				commands.push(
+					updateCommand(
+						s,
+						dueForDate(s, String(due.date).split("T")[0]),
+					),
+				);
+			});
+	});
+
+	// A step can also fall behind without its parent ever going stale: do the routine but
+	// leave one box unchecked, and Todoist rolls the PARENT forward on completion while the
+	// step stays put. The parent is healthy, so nothing above would ever touch that step and
+	// it stays overdue indefinitely. Catch any straggler up to wherever its parent now sits.
+	const commanded = {};
+	commands.forEach((c) => {
+		commanded[c.args.id] = true;
+	});
+	tasks.forEach((t) => {
+		const parent = byId[parentIdOf(t)];
+		if (!parent || commanded[String(t.id)]) return;
+		if (!t.due || !t.due.date || !parent.due || !parent.due.date) return;
+		const stepDay = String(t.due.date).split("T")[0];
+		const parentDay = String(parent.due.date).split("T")[0];
+		if (stepDay < parentDay) {
+			commands.push(updateCommand(t, dueForDate(t, parentDay)));
+		}
+	});
 
 	// The timezone drives every comparison here; log it so a misconfigured Apps Script
 	// project shows up as an obviously wrong clock rather than silently wrong dates.
 	Logger.log(
-		`Reschedule "${section.name}": moved ${commands.length} of ${tasks.length} tasks (${tasks.length - commands.length} not yet ${RESCHEDULE_GRACE_HOURS}h past due, or undated) — now ${now} / tz ${Session.getScriptTimeZone()}`,
+		`Reschedule "${section.name}": moved ${commands.length} of ${tasks.length} tasks — ${leaders.length} judged directly (the rest are sub-habits, which follow their parent), skipping those not yet ${RESCHEDULE_GRACE_HOURS}h past due or undated — now ${now} / tz ${Session.getScriptTimeZone()}`,
 	);
 
 	if (commands.length === 0) return;
@@ -104,15 +158,20 @@ function isStale(task, now) {
 	);
 }
 
-// Build the new `due` object for a task. Keeps the original recurring `string` (so
-// the schedule survives) and sets `date` to the next matching day at the same time.
+// Build the new `due` object for a task: its next matching day, at the same time.
 function nextOccurrenceDue(task) {
 	const d = task.due || {};
-	const rawDate = d.date || "";
 	const isWorkday = /workday/i.test(d.string || "");
-
 	const target = isWorkday ? nextWeekday(new Date()) : addDays(new Date(), 1);
-	const targetDate = localDateString(target);
+	return dueForDate(task, localDateString(target));
+}
+
+// Put `task` on targetDate (YYYY-MM-DD), keeping its time-of-day and its recurring
+// `string` so the schedule survives the move. Split out from nextOccurrenceDue so a
+// sub-habit can be moved to its PARENT's date while still carrying its own recurrence.
+function dueForDate(task, targetDate) {
+	const d = task.due || {};
+	const rawDate = d.date || "";
 
 	// Preserve the time-of-day if the original due carried one (datetime has a "T").
 	const newDate = rawDate.indexOf("T") !== -1
@@ -124,6 +183,14 @@ function nextOccurrenceDue(task) {
 	return isRecurring
 		? { string: d.string, date: newDate }
 		: { date: newDate };
+}
+
+function updateCommand(task, due) {
+	return {
+		type: "item_update",
+		uuid: Utilities.getUuid(),
+		args: { id: String(task.id), due: due },
+	};
 }
 
 // ── Lookups ──────────────────────────────────────────────────────────────────────
