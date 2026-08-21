@@ -18,7 +18,7 @@ Four data sources feed into separate Google Sheets, blended in Looker Studio, an
 
 | Source | Data |
 |---|---|
-| Apple Health | Steps, sleep stages, HRV, resting heart rate, blood oxygen, noise exposure |
+| Apple Health | Steps, sleep, HRV, resting heart rate, blood oxygen, noise exposure — via a free nightly Shortcut |
 | Apple Watch | Workouts, stand hours, activity rings |
 | Everhour | Time entries synced nightly via Apps Script |
 | Todoist | Task completions, habit streaks, karma — synced nightly |
@@ -45,8 +45,8 @@ Looker Studio blends all four data sources on `date`. Obsidian surfaces the dash
 | Layer | Tool | Why |
 |---|---|---|
 | Capture (manual) | Apple Shortcuts | Native, free, Watch + Siri support |
-| Capture (passive) | Health Auto Export | Writes Apple Health data to Sheets daily |
-| Capture (productivity) | Todoist REST API v2 | Task completions, habits, karma |
+| Capture (passive) | Apple Shortcuts (native Health actions) | Free "Health Sync" shortcut reads Apple Health and POSTs a daily row — no paid app |
+| Capture (productivity) | Todoist API v1 (unified) | Task completions, habits, karma |
 | Capture (time) | Everhour API | Time entries, billable hours |
 | Data store | Google Sheets (4 separate sheets) | Free, REST API, blendable in Looker Studio |
 | Sync | Google Apps Script | Webhook for Shortcuts push; nightly pull for Todoist + Everhour |
@@ -61,22 +61,32 @@ Looker Studio blends all four data sources on `date`. Obsidian surfaces the dash
 quantified-self/
 ├── README.md
 ├── docs/
-│   └── diagrams.md              # Mermaid architecture diagrams
+│   ├── diagrams.md              # Mermaid architecture diagrams
+│   └── todoist/
+│       └── architecture.md      # Todoist scripts: structure, functions, edge cases
 ├── shortcuts/
 │   ├── README.md                # Setup guide + Watch + automations
 │   ├── log-mood.md              # Log Mood shortcut
 │   ├── log-event.md             # Mark core + per-event wrappers (Siri one-shot)
-│   ├── log-focus-block.md       # Start/End Focus block
+│   ├── health-sync.md           # Nightly Apple Health → webhook (free, native)
+│   ├── generate-health-sync.py  # Generates an importable health-sync.shortcut scaffold
 │   └── morning-summary.md       # Morning Summary → Obsidian daily note
 ├── sheets/
 │   ├── README.md                # All 4 sheets overview
 │   ├── schema.md                # quantified-self-log schema
 │   ├── schema-health.md         # quantified-self-health schema
-│   ├── schema-todoist.md        # quantified-self-todoist schema (3 tabs)
 │   ├── schema-everhour.md       # quantified-self-everhour schema (2 tabs)
 │   ├── apps-script.gs           # Webhook for Shortcuts → Log sheet
-│   ├── todoist-sync.gs          # Nightly Todoist pull (standalone GAS project)
-│   └── everhour-sync.gs         # Nightly Everhour pull (same GAS project)
+│   ├── health-webhook.gs        # Webhook for Health Sync shortcut → Health sheet
+│   ├── everhour-sync.gs         # Nightly Everhour pull (same GAS project)
+│   └── todoist/
+│       ├── schema-todoist.md              # quantified-self-todoist schema (5 tabs)
+│       ├── todoist-sync.gs                # Orchestrator: nightly pull + Overdue/Karma/RecurringStatus
+│       ├── todoist-sync-completions.gs    # Completions tab (one-off + recurring + In Review)
+│       ├── todoist-sync-sections.gs       # "In Review" snapshot source
+│       ├── todoist-sync-utils.gs          # Shared HTTP, caching, cursor state
+│       ├── todoist-habit-daily.gs         # HabitDaily grid + one-time history synthesis
+│       └── todoist-reschedule-habits.gs   # Manual: bump skipped habits (writes back)
 ├── analytics/
 │   └── README.md                # Looker Studio 4-source blend setup
 ├── obsidian/
@@ -98,17 +108,18 @@ quantified-self/
 4. Assign Siri phrases and Watch complications (see `shortcuts/README.md`)
 5. Connect `quantified-self-log` to Looker Studio
 
-### Phase 1.5 — Health data
+### Phase 1.5 — Health data (free, native)
 
 1. Create `quantified-self-health` in Google Sheets with a `Health` tab
-2. Configure Health Auto Export (see `sheets/schema-health.md`)
-3. Add as a data source in Looker Studio
+2. Deploy `sheets/health-webhook.gs` as a Web App (bound to that sheet) — copy the URL
+3. Build the **Health Sync** shortcut, paste the URL, and set a daily 23:55 automation (see `shortcuts/health-sync.md`)
+4. Add as a data source in Looker Studio
 
 ### Phase 1.5 — Todoist + Everhour sync
 
 1. Create `quantified-self-todoist` and `quantified-self-everhour` in Google Sheets
 2. Create a standalone Apps Script project named `quantified-self-sync`
-3. Paste `sheets/todoist-sync.gs` and `sheets/everhour-sync.gs` into the project
+3. Paste the six `sheets/todoist/*.gs` files and `sheets/everhour-sync.gs` into the project
 4. Set Script Properties: `TODOIST_TOKEN`, `EVERHOUR_API_KEY`, and both spreadsheet IDs
 5. Set time-based triggers: `syncTodoist` at 23:30, `syncEverhour` at 23:45
 6. Add both sheets as data sources in Looker Studio
@@ -125,7 +136,7 @@ quantified-self/
 ## Roadmap
 
 - [x] Phase 1: Shortcuts + Google Sheets + Looker Studio (MVP)
-- [x] Phase 1.5: Health data export (Health Auto Export → Sheets)
+- [x] Phase 1.5: Health data export (free native Shortcut → webhook → Sheets)
 - [x] Phase 1.5: Todoist sync (completions, habits, karma)
 - [x] Phase 1.5: Everhour sync (time entries, daily summary)
 - [x] Phase 1.5: Obsidian — embedded Looker Studio dashboard
@@ -151,5 +162,6 @@ quantified-self/
 | Dedup strategy | Stable API IDs (task_id, entry_id) | Survives late edits; date-based dedup would miss same-day re-completions |
 | Manual events | ~5 categories | Start small, let data drive expansion |
 | Auto events | Apple Health | Already collecting, no effort |
+| Health capture | Native Shortcut + webhook (not Health Auto Export) | Free — paid app's only advantage is background reliability; a nightly automation is enough |
 | Custom app language | SwiftUI | Native Watch support, Swift Charts |
 | Custom backend | Supabase | PostgreSQL, open source, free tier |

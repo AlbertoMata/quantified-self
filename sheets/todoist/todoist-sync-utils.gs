@@ -254,6 +254,24 @@ function toDateString(date) {
 	return date.toISOString().split("T")[0];
 }
 
+// Same, but in the SCRIPT's timezone rather than UTC. toDateString() formats via
+// toISOString(), so in a UTC-behind zone an evening run reads tomorrow's UTC date as
+// "today" — which lands rescheduled tasks a day late and files evening habit completions
+// on the wrong day. Any comparison against a clock or a local calendar day wants this one.
+function localDateString(date) {
+	return Utilities.formatDate(
+		date,
+		Session.getScriptTimeZone(),
+		"yyyy-MM-dd",
+	);
+}
+
+function addDays(date, days) {
+	const copy = new Date(date.getTime());
+	copy.setDate(copy.getDate() + days);
+	return copy;
+}
+
 // Normalise a sheet cell value to a YYYY-MM-DD key for comparison.
 // Sheets returns a Date object (not a string) once a cell is date-formatted, so
 // raw === comparisons against "2026-05-26" silently miss. This helper handles

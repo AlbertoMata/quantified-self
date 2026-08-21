@@ -104,7 +104,7 @@ function syncCompletions() {
 				t.due && t.due.is_recurring ? "TRUE" : "FALSE",
 				t.due ? t.due.date : "",
 				durationMinutes(t.duration),
-				toDateString(new Date()),
+				localDateString(new Date()), // local: at 23:30 the UTC date is already tomorrow
 				t.parent_id || t.parentId || "", // self-blend key: parent_id ↔ task_id
 				extractComplexity(labels) || "", // complexity/story points
 			];

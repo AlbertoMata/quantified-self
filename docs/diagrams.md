@@ -24,7 +24,7 @@ flowchart TD
     subgraph Storage["Google Sheets Storage"]
         SL[("quantified-self-log\nLog")]
         SH[("quantified-self-health\nHealth")]
-        ST[("quantified-self-todoist\nCompletions · Overdue · KarmaStats")]
+        ST[("quantified-self-todoist\nCompletions · Overdue · KarmaStats\nRecurringStatus · HabitDaily")]
         SE[("quantified-self-everhour\nTimeEntries · DailySummary")]
     end
 
@@ -88,13 +88,14 @@ sequenceDiagram
 
     TR->>GAS: syncTodoist() / syncEverhour()
     GAS->>SP: Read API token + last sync timestamp
-    GAS->>API: GET /tasks?completed_since=lastSync (paginated)
-    API-->>GAS: Array of records
-    GAS->>SH: Read existing IDs column → Set
-    GAS->>GAS: Filter out already-seen IDs
-    GAS->>SH: appendRows(new records)
+    GAS->>API: GET /tasks/completed/by_completion_date + /activities (paginated, since lastSync)
+    API-->>GAS: Completed tasks + recurring check-off events
+    GAS->>SH: Read existing dedup keys → Set
+    GAS->>GAS: Drop already-seen task_id + completed_at pairs
+    GAS->>SH: appendRows(new completions)
     GAS->>SP: Write new lastSync timestamp
-    GAS->>SH: Rebuild DailySummary / KarmaStats (upsert by date)
+    GAS->>SH: Replace Overdue and RecurringStatus snapshots · upsert KarmaStats / DailySummary
+    GAS->>SH: Rebuild HabitDaily grid from Completions + RecurringStatus (sheet-to-sheet)
 ```
 
 ---

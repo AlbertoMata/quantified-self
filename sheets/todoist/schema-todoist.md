@@ -1,9 +1,9 @@
 # Sheet Schema — Todoist
 
 Google Sheet name: `quantified-self-todoist`  
-Populated by: `sheets/todoist-sync.gs` (standalone Apps Script, nightly trigger at 23:30)
+Populated by: the standalone Apps Script project in `sheets/todoist/` — entry point `syncTodoist()` in `todoist-sync.gs` (nightly trigger at 23:30)
 
-Three tabs, each capturing a different shape of Todoist data.
+Five tabs, each capturing a different shape of Todoist data. The first four are fetched from the Todoist API; `HabitDaily` is derived from the other tabs (only its one-time history synthesizer touches the API, to read each habit's `added_at`).
 
 ---
 
@@ -56,6 +56,8 @@ Daily snapshot of tasks that were due but not completed. The sync script **repla
 
 **Strategy**: full daily replace — delete all rows where `snapshot_date = today`, then write fresh.
 
+**Historical caveat**: before 2026-08-20 the nightly snapshot was stamped with the UTC date (one day ahead), which also inflated `days_overdue` by one. Subtract a day from both when reading old rows.
+
 | # | Column | Type | Example | Notes |
 |---|---|---|---|---|
 | A | `snapshot_date` | YYYY-MM-DD | `2026-05-23` | Date this snapshot was taken |
@@ -78,7 +80,7 @@ snapshot_date	task_id	task_content	project_name	labels	due_date	days_overdue	pri
 
 ## Tab 3: `KarmaStats`
 
-One row per day capturing Todoist's productivity metrics. Deduplication on `date` — if the row already exists for today, update it in place.
+One row per day capturing Todoist's productivity metrics. Deduplication on `date` — if the row already exists for today, update it in place. Rows written before 2026-08-20 are keyed one day ahead (UTC date stamp at a 23:30 local trigger); shift them back a day when joining with the `Health` sheet.
 
 **Deduplication key**: `date`
 
@@ -96,6 +98,76 @@ One row per day capturing Todoist's productivity metrics. Deduplication on `date
 ```
 date	karma_score	karma_delta	tasks_completed	tasks_added	streak_days	sync_date
 ```
+
+---
+
+## Tab 4: `RecurringStatus`
+
+Daily snapshot of every **active recurring task** and its due date at 23:30 — one row per task per night, written whether or not the task was completed that day. When a task's due date advances between consecutive snapshots, it was completed (or rescheduled) on the earlier day.
+
+This tab is the **spine of `HabitDaily`**: it is the only tab that records a habit's existence on the days nothing happened. Prefer `Completions` for counting check-offs (it is an event log and can see several completions of one task between runs); use this tab to reconstruct state.
+
+**Strategy**: replace today's rows, then append the fresh snapshot (idempotent re-runs).
+
+**Historical caveat**: rows written before 2026-08-20 are labeled one day ahead — the nightly 23:30 trigger is already past midnight UTC, and the old code stamped the UTC date. Read an old row labeled `D` as "state at the start of day `D`". Fixed on 2026-08-20 (`localDateString`).
+
+| # | Column | Type | Example | Notes |
+| --- | --- | --- | --- | --- |
+| A | `snapshot_date` | YYYY-MM-DD | `2026-08-15` | Night the snapshot was taken |
+| B | `task_id` | string | `6g25Qgf2FW7P63F5` | |
+| C | `content` | string | `Drink Water - Drink water early…` | Full Todoist title |
+| D | `project_name` | string | `Habits` | |
+| E | `section_name` | string | `🌅 Morning Routine` | |
+| F | `labels` | string | `habits,✅_streak` | Comma-separated |
+| G | `priority` | integer 1–4 | `4` | |
+| H | `due_date` | date/datetime | `2026-08-16T05:20:00` | Due of the NEXT pending occurrence at snapshot time |
+| I | `recurrence_string` | string | `every workday at 5:20 am` | |
+| J | `parent_id` | string | | Empty for top-level tasks |
+
+**Header row:**
+```
+snapshot_date	task_id	content	project_name	section_name	labels	priority	due_date	recurrence_string	parent_id
+```
+
+---
+
+## Tab 5: `HabitDaily`
+
+The dense **habit × day grid** behind the Looker habit tracker: one row per tracked habit per calendar day, **including the days it was skipped**. `Completions` alone cannot power that chart — it is an event log, so a missed day simply has no row, and Looker Studio has no cross join or calendar generator to invent one.
+
+Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only the one-time `synthesizeHabitDailyHistory()` touches the API (the live habit list, for `added_at`). `RecurringStatus` is the spine (did the habit exist that day, was it still pending at 23:30); `Completions` is the truth (was it checked off), keyed on the **local day of `completed_at`** — never on `Completions.due_date`, whose pre-2026-08-10 rows carry next-occurrence semantics. Rebuilding at any time converges on the same answer.
+
+**Strategy**: windowed replace. The nightly `syncHabitDaily()` (last step of `syncTodoist()`, because its sources must be written first) rebuilds the trailing 7 days; `backfillHabitDaily()` rebuilds 400. An **empty tab auto-widens to the full 400-day span**, so a fresh deploy, a layout-change clear, or a manual wipe refills itself on the next nightly run. A header that does not match the current layout causes the tab to be **cleared and rebuilt**, never overwritten in place.
+
+**Synthetic history**: rows dated before the spine's first day (2026-08-10) are written by `synthesizeHabitDailyHistory()` — reconstructed from `Completions` rather than observed. A **blank `due_date` (col K)** is the marker: no snapshot existed. Each habit's synthetic window starts at max(its Todoist `added_at`, its first captured completion) — a habit never captured before the spine began is skipped rather than painted "missed" — and its section/labels/priority/recurrence are the habit's *current* values. Safe to re-run; rebuilds never touch the block.
+
+**Weekend policy**: Saturdays and Sundays are rest days **across all history** — an uncompleted weekend day reads `not_due`, never `missed`; a weekend check-off still counts as `done` (with `due = 1`).
+
+**Recurrence migration (2026-08-20)**: every habit in the Habits project switched from `every day` to `every workday`, and the two Daily Reminders tasks gained workday recurrence (they enter the spine — and this grid — only from that date). Spine rows written before the migration still carry the old `every day` strings; the weekend policy deliberately overrides them, on the grounds that weekends were never part of the contract.
+
+| # | Column | Type | Example | Notes |
+| --- | --- | --- | --- | --- |
+| A | `date` | YYYY-MM-DD | `2026-08-15` | Grid day |
+| B | `task_id` | string | `6g25Qgf2FW7P63F5` | Stable across occurrences — the pivot key |
+| C | `habit` | string | `Drink Water` | Short name: the title up to the first `" - "` |
+| D | `habit_full` | string | `Drink Water - Drink water early…` | Untrimmed Todoist title |
+| E | `section_name` | string | `🌅 Morning Routine` | Routine the habit belongs to |
+| F | `labels` | string | `habits,health` | From the spine |
+| G | `status` | enum | `done` | `done` / `missed` / `not_due` |
+| H | `completed` | 0/1 | `1` | The metric for pivots and heatmaps |
+| I | `due` | 0/1 | `1` | Scheduled that day (weekday, pending per snapshot) or completed |
+| J | `completed_at` | HH:mm | `05:22` | Local clock time of the check-off; empty unless done |
+| K | `due_date` | date | `2026-08-15` | The habit's due date in that night's snapshot — shows drift |
+| L | `priority` | integer 1–4 | `1` | From the spine |
+| M | `recurrence_string` | string | `every workday at 5:20 am` | The rule as of that night |
+| N | `sync_date` | YYYY-MM-DD | `2026-08-20` | When this row was last rebuilt |
+
+**Header row:**
+```
+date	task_id	habit	habit_full	section_name	labels	status	completed	due	completed_at	due_date	priority	recurrence_string	sync_date
+```
+
+**Looker tip**: pivot table with rows = `habit`, columns = `date`, metric = `MAX(completed)` — or filter `status = "missed"` for the "days I skipped" table. No blends and no calculated fields; that is the point of this tab.
 
 ---
 

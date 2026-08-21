@@ -52,6 +52,9 @@ function syncTodoist() {
 		["Overdue", syncOverdue],
 		["KarmaStats", syncKarmaStats],
 		["RecurringStatus", syncRecurringStatus],
+		// Last on purpose: it rebuilds its grid FROM the Completions and RecurringStatus
+		// tabs, so both must already hold today's rows when it runs.
+		["HabitDaily", syncHabitDaily],
 	].forEach(([name, fn]) => {
 		try {
 			fn();
@@ -72,7 +75,10 @@ function syncOverdue() {
 	const ss = SpreadsheetApp.openById(TODOIST_SPREADSHEET_ID);
 	const sheet = ss.getSheetByName("Overdue");
 
-	const today = toDateString(new Date());
+	// Local date, not toDateString(): the trigger fires 23:30 America/Mexico_City,
+	// which is already tomorrow in UTC — a UTC stamp labels every nightly snapshot
+	// with the NEXT day (and inflated days_overdue by one for months).
+	const today = localDateString(new Date());
 
 	// Delete today's existing snapshot rows (column A = snapshot_date).
 	// Use dateKey() because Sheets returns column A as a Date once the column is
@@ -127,7 +133,10 @@ function syncKarmaStats() {
 	const ss = SpreadsheetApp.openById(TODOIST_SPREADSHEET_ID);
 	const sheet = ss.getSheetByName("KarmaStats");
 
-	const today = toDateString(new Date());
+	// Local date, not toDateString(): the trigger fires 23:30 America/Mexico_City,
+	// which is already tomorrow in UTC — a UTC stamp labels every nightly snapshot
+	// with the NEXT day (and inflated days_overdue by one for months).
+	const today = localDateString(new Date());
 
 	// Build the existing-dates Set with dateKey() — Sheets returns date-formatted
 	// cells as Date objects, so the default String() in getExistingIds yields
@@ -236,7 +245,10 @@ function syncRecurringStatus() {
 		]);
 	}
 
-	const today = toDateString(new Date());
+	// Local date, not toDateString(): the trigger fires 23:30 America/Mexico_City,
+	// which is already tomorrow in UTC — a UTC stamp labels every nightly snapshot
+	// with the NEXT day (and inflated days_overdue by one for months).
+	const today = localDateString(new Date());
 
 	// Replace today's snapshot rows (idempotent re-runs).
 	const data = sheet.getDataRange().getValues();

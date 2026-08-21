@@ -212,28 +212,13 @@ function findSectionByName(projectId, plainName) {
 
 // ── Date helpers ─────────────────────────────────────────────────────────────────
 
-// The shared toDateString() formats via toISOString(), i.e. UTC. This file's comparisons are
-// clock-sensitive, and in a UTC-behind timezone an evening run would read tomorrow's UTC date
-// as "today" and land every task a day late — so format in the script's timezone instead.
-function localDateString(date) {
-	return Utilities.formatDate(
-		date,
-		Session.getScriptTimeZone(),
-		"yyyy-MM-dd",
-	);
-}
+// localDateString() and addDays() live in todoist-sync-utils.gs — HabitDaily needs them too.
 
 // ISO day of week: 1 = Monday … 7 = Sunday.
 function localDayOfWeek(date) {
 	return Number(
 		Utilities.formatDate(date, Session.getScriptTimeZone(), "u"),
 	);
-}
-
-function addDays(date, days) {
-	const copy = new Date(date.getTime());
-	copy.setDate(copy.getDate() + days);
-	return copy;
 }
 
 // Next calendar day, skipping Saturday (6) and Sunday (7).
