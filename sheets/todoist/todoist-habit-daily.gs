@@ -9,8 +9,8 @@
 // Source: the nightly path makes no API calls — everything it needs is already in the
 // spreadsheet (the one-time synthesizeHabitDailyHistory() is the exception; see below):
 //   * `RecurringStatus` is the SPINE. It writes one row per active recurring task
-//     every night whether or not the task was completed, so it already answers
-//     "did this habit exist on day D, and was it still pending at 23:30".
+//     every night whether or not the task was completed, so it answers "did this
+//     habit exist on day D" (and carries its labels/section/priority as of that day).
 //   * `Completions` is the TRUTH for whether it was checked off. It has to be:
 //     RecurringStatus alone cannot tell a completion from a bump by
 //     todoist-reschedule-habits.gs, because both advance due_date.
@@ -28,10 +28,19 @@
 // written before the completed_due_date fix shipped. completed_at has always been
 // correct, so the grid is built on it and needs no backfill caveat.
 //
-// Known blind spot: if todoist-reschedule-habits.gs bumps a skipped habit forward
-// BEFORE the 23:30 snapshot, that day's spine row shows due_date in the future and the
-// day reads "not_due" rather than "missed". It fails safe — a miss is dropped, never a
-// completion invented — but a routine you reschedule habitually will flatter itself.
+// Due-ness is CONTRACT-based, not snapshot-based: every weekday a habit has a spine row
+// counts as due (all habits are "every workday"). The snapshot's due_date cannot be
+// trusted for this — the reschedule trigger runs ~20:09 nightly, before the 23:30
+// snapshot, bumping every skipped habit to tomorrow; deriving due-ness from the bumped
+// date laundered every miss into "not_due" (observed live, Aug 20 – Sep 3 2026). The
+// spine now answers only "did this habit exist that day" plus metadata; Completions
+// answers "was it done"; the calendar answers "was it owed".
+//
+// An owed day is only a MISS once it is over. Today's rows read "pending" (due = 1,
+// completed = 0) — the day in progress is not a failure, and the 23:30 snapshot would
+// otherwise sentence every habit not yet checked off. The verdict settles on its own:
+// the nightly rebuild covers the last HABIT_DAILY_WINDOW_DAYS days, so today's pending
+// rows become done/missed tomorrow. Days that have not arrived read "not_due" (due = 0).
 //
 // Weekend policy: Saturdays and Sundays are REST DAYS across ALL history. An uncompleted
 // weekend day reads "not_due", never "missed"; a weekend check-off still counts as "done"
@@ -229,7 +238,9 @@ function synthesizeHabitDailyHistory() {
 				completed,
 				key,
 			);
-			const wasDue = !isRestDay(d) || wasCompleted;
+			// Same verdict rule as the live grid. Every synthesized day is strictly before
+			// the spine start, so "pending" can never come out of here.
+			const status = habitDayStatus(d, wasCompleted, today);
 			rows.push([
 				d,
 				h.id,
@@ -237,9 +248,9 @@ function synthesizeHabitDailyHistory() {
 				h.content,
 				h.sectionName,
 				h.labels.join(","),
-				wasCompleted ? "done" : wasDue ? "missed" : "not_due",
+				status,
 				wasCompleted ? 1 : 0,
-				wasDue ? 1 : 0,
+				status === "not_due" ? 0 : 1,
 				wasCompleted ? completed[key] : "",
 				"", // due_date: no snapshot existed — blank marks the row as synthetic
 				h.priority,
@@ -373,7 +384,7 @@ function rebuildHabitDaily(days) {
 	const cutoff = localDateString(addDays(new Date(), -days));
 
 	const completed = buildCompletionIndex(ss);
-	const spine = readHabitSpine(spineSheet, cutoff, today);
+	const spine = readHabitSpine(spineSheet, cutoff);
 
 	// Never let the replace reach below the observed spine: rebuild can only regenerate
 	// days the spine has, so a 400-day cutoff would DELETE the synthesized pre-spine rows
@@ -391,15 +402,15 @@ function rebuildHabitDaily(days) {
 	const rows = spine.map((s) => {
 		const key = `${s.taskId}|${s.date}`;
 		const wasCompleted = Object.prototype.hasOwnProperty.call(completed, key);
-		// Scheduled that day if it was still pending at snapshot time AND the day is a
-		// weekday — weekends are rest days by policy (see header), so a Saturday skip is
-		// not a miss. The completion clause then does two jobs: a weekend check-off still
-		// counts as done (with due = 1), and on weekdays it keeps a habit you actually did
-		// from reading "not scheduled" just because completing it pushed due_date past
-		// the day.
-		const scheduled =
-			s.dueDate !== "" && s.dueDate <= s.date && !isRestDay(s.date);
-		const wasDue = scheduled || wasCompleted;
+		// Due-ness is the WORKDAY CONTRACT, not the snapshot's due_date: a weekday on
+		// which the habit existed (it has a spine row) is a day it was owed. The snapshot
+		// due date is untrustworthy for this — the reschedule trigger runs ~20:09, three
+		// hours before the snapshot, bumping every skipped habit to tomorrow and making
+		// it read "not scheduled" instead of missed (verified in the activity log). The
+		// snapshot due date is kept in col K as drift info only. Whether an owed day is a
+		// miss or still open is habitDayStatus()'s call; everything except "not_due" is
+		// owed, which keeps a rest-day check-off at due = 1.
+		const status = habitDayStatus(s.date, wasCompleted, today);
 		return [
 			s.date,
 			s.taskId,
@@ -407,9 +418,9 @@ function rebuildHabitDaily(days) {
 			s.content,
 			s.sectionName,
 			s.labels.join(","),
-			wasCompleted ? "done" : wasDue ? "missed" : "not_due",
+			status,
 			wasCompleted ? 1 : 0,
-			wasDue ? 1 : 0,
+			status === "not_due" ? 0 : 1,
 			wasCompleted ? completed[key] : "",
 			s.dueDate,
 			s.priority,
@@ -422,9 +433,11 @@ function rebuildHabitDaily(days) {
 
 	const done = rows.filter((r) => r[6] === "done").length;
 	const missed = rows.filter((r) => r[6] === "missed").length;
+	const pending = rows.filter((r) => r[6] === "pending").length;
 	Logger.log(
 		`HabitDaily: rebuilt ${rows.length} rows since ${cutoff} — ${done} done, ${missed} missed, ` +
-			`${rows.length - done - missed} not due (tz ${Session.getScriptTimeZone()})`,
+			`${pending} pending (today), ${rows.length - done - missed - pending} not due ` +
+			`(tz ${Session.getScriptTimeZone()})`,
 	);
 }
 
@@ -434,17 +447,18 @@ function rebuildHabitDaily(days) {
 // label, from `cutoff` onward. One entry per (habit, day) — including the days it was
 // skipped, which is the entire point of reading this tab instead of Completions.
 //
-// Rows labeled AFTER `today` are skipped: a snapshot cannot observe a day that has not
-// happened, so a future label is always a stamping artifact (syncRecurringStatus used to
-// format "today" in UTC, which after 18:00 local is already tomorrow). Rendering one
-// would show tomorrow's habits as pre-emptively missed.
-function readHabitSpine(spineSheet, cutoff, today) {
+// Rows labeled AFTER `today` are kept but can never score as a miss — habitDayStatus()
+// reads them as "not_due". A snapshot cannot observe a day that has not happened, so a
+// future label is always a stamping artifact (syncRecurringStatus used to format "today"
+// in UTC, which after 18:00 local is already tomorrow); showing tomorrow's habits as
+// pre-emptively missed was the thing worth preventing, not the row itself.
+function readHabitSpine(spineSheet, cutoff) {
 	const data = spineSheet.getDataRange().getValues();
 	const out = [];
 	for (let i = 1; i < data.length; i++) {
 		const r = data[i];
 		const date = dateKey(r[0]);
-		if (!date || date < cutoff || date > today) continue;
+		if (!date || date < cutoff) continue;
 		const labels = splitLabels(r[5]);
 		if (!hasLabel(labels, HABITS_LABEL)) continue;
 		out.push({
@@ -596,6 +610,26 @@ function localTimeOf(cellValue) {
 function isRestDay(dateStr) {
 	const dow = new Date(`${dateStr}T00:00:00Z`).getUTCDay(); // 0 = Sunday, 6 = Saturday
 	return dow === 0 || dow === 6;
+}
+
+// The verdict for one (habit, day). Single source of truth for column G — the grid
+// builder and the history synthesizer both go through here.
+//
+//   done     a completion landed on that local day
+//   pending  owed, still open, and the day is not over yet (only ever today)
+//   missed   owed, the day is over, nothing recorded
+//   not_due  not owed: a weekend rest day, or a day that has not arrived
+//
+// "pending" exists because the day in progress is not a failure. The nightly snapshot
+// writes today's spine rows at 23:30 and the grid would score every not-yet-done habit
+// as missed the moment they appear — and a manual backfill run at noon would do it for
+// the whole day. The verdict is transient: the next nightly rebuild covers the last
+// HABIT_DAILY_WINDOW_DAYS days, so today's pending rows settle into done/missed tomorrow.
+function habitDayStatus(dateStr, wasCompleted, today) {
+	if (wasCompleted) return "done";
+	if (dateStr > today) return "not_due"; // hasn't happened; cannot be a miss
+	if (isRestDay(dateStr)) return "not_due";
+	return dateStr === today ? "pending" : "missed";
 }
 
 // completed_at as a YYYY-MM-DD in the SCRIPT's timezone. The stored value is UTC, so a

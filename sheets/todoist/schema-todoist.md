@@ -135,13 +135,15 @@ snapshot_date	task_id	content	project_name	section_name	labels	priority	due_date
 
 The dense **habit × day grid** behind the Looker habit tracker: one row per tracked habit per calendar day, **including the days it was skipped**. `Completions` alone cannot power that chart — it is an event log, so a missed day simply has no row, and Looker Studio has no cross join or calendar generator to invent one.
 
-Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only the one-time `synthesizeHabitDailyHistory()` touches the API (the live habit list, for `added_at`). `RecurringStatus` is the spine (did the habit exist that day, was it still pending at 23:30); `Completions` is the truth (was it checked off), keyed on the **local day of `completed_at`** — never on `Completions.due_date`, whose pre-2026-08-10 rows carry next-occurrence semantics. Rebuilding at any time converges on the same answer.
+Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only the one-time `synthesizeHabitDailyHistory()` touches the API (the live habit list, for `added_at`). `RecurringStatus` is the spine (did the habit exist that day — its due date is never used for status, since the nightly reschedule trigger moves it before the snapshot); `Completions` is the truth (was it checked off), keyed on the **local day of `completed_at`** — never on `Completions.due_date`, whose pre-2026-08-10 rows carry next-occurrence semantics. Rebuilding at any time converges on the same answer.
 
 **Strategy**: windowed replace. The nightly `syncHabitDaily()` (last step of `syncTodoist()`, because its sources must be written first) rebuilds the trailing 7 days; `backfillHabitDaily()` rebuilds 400. An **empty tab auto-widens to the full 400-day span**, so a fresh deploy, a layout-change clear, or a manual wipe refills itself on the next nightly run. A header that does not match the current layout causes the tab to be **cleared and rebuilt**, never overwritten in place.
 
 **Synthetic history**: rows dated before the spine's first day (2026-08-10) are written by `synthesizeHabitDailyHistory()` — reconstructed from `Completions` rather than observed. A **blank `due_date` (col K)** is the marker: no snapshot existed. Each habit's synthetic window starts at max(its Todoist `added_at`, its first captured completion) — a habit never captured before the spine began is skipped rather than painted "missed" — and its section/labels/priority/recurrence are the habit's *current* values. Safe to re-run; rebuilds never touch the block.
 
 **Weekend policy**: Saturdays and Sundays are rest days **across all history** — an uncompleted weekend day reads `not_due`, never `missed`; a weekend check-off still counts as `done` (with `due = 1`).
+
+**The day in progress**: today's rows read `pending`, not `missed` — the day is not over, so nothing has been skipped yet. They carry `due = 1`, `completed = 0`, and settle into `done` or `missed` on the next nightly rebuild (its 7-day window covers them). Days that have not arrived read `not_due` with `due = 0`.
 
 **Recurrence migration (2026-08-20)**: every habit in the Habits project switched from `every day` to `every workday`, and the two Daily Reminders tasks gained workday recurrence (they enter the spine — and this grid — only from that date). Spine rows written before the migration still carry the old `every day` strings; the weekend policy deliberately overrides them, on the grounds that weekends were never part of the contract.
 
@@ -153,9 +155,9 @@ Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only 
 | D | `habit_full` | string | `Drink Water - Drink water early…` | Untrimmed Todoist title |
 | E | `section_name` | string | `🌅 Morning Routine` | Routine the habit belongs to |
 | F | `labels` | string | `habits,health` | From the spine |
-| G | `status` | enum | `done` | `done` / `missed` / `not_due` |
+| G | `status` | enum | `done` | `done` (checked off) / `pending` (owed, today, still open) / `missed` (owed, day over, nothing recorded) / `not_due` (weekend, or a day that has not arrived) |
 | H | `completed` | 0/1 | `1` | The metric for pivots and heatmaps |
-| I | `due` | 0/1 | `1` | Scheduled that day (weekday, pending per snapshot) or completed |
+| I | `due` | 0/1 | `1` | Owed that day — 1 for everything except `not_due`: any weekday the habit existed (workday contract), plus any day it was completed |
 | J | `completed_at` | HH:mm | `05:22` | Local clock time of the check-off; empty unless done |
 | K | `due_date` | date | `2026-08-15` | The habit's due date in that night's snapshot — shows drift |
 | L | `priority` | integer 1–4 | `1` | From the spine |
@@ -167,7 +169,7 @@ Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only 
 date	task_id	habit	habit_full	section_name	labels	status	completed	due	completed_at	due_date	priority	recurrence_string	sync_date
 ```
 
-**Looker tip**: pivot table with rows = `habit`, columns = `date`, metric = `MAX(completed)` — or filter `status = "missed"` for the "days I skipped" table. No blends and no calculated fields; that is the point of this tab.
+**Looker tip**: pivot table with rows = `habit`, columns = `date` (the real date, so the columns stay in calendar order and each cell is one day), metric = `MAX(completed)` — or filter `status = "missed"` for the "days I skipped" table. For a red/green/neutral grid add one calculated field, `CASE WHEN status = "done" THEN 1 WHEN status = "missed" THEN -1 ELSE 0 END`, which scores `pending` and `not_due` as a neutral 0. Set the chart's date range to **This week (starts Monday)**: with a weekday-name column dimension and a range spanning several weeks, one good Tuesday paints every Tuesday. No blends; that is the point of this tab.
 
 ---
 

@@ -62,6 +62,8 @@ quantified-self/
 ├── README.md
 ├── docs/
 │   ├── diagrams.md              # Mermaid architecture diagrams
+│   ├── plans/
+│   │   └── habits-dashboard.md  # Looker Habits page: design + required sheet changes
 │   └── todoist/
 │       └── architecture.md      # Todoist scripts: structure, functions, edge cases
 ├── shortcuts/
