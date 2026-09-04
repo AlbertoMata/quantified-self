@@ -11,7 +11,10 @@
 //   TODOIST_SPREADSHEET_ID  the <ID> from the quantified-self-todoist URL:
 //                           https://docs.google.com/spreadsheets/d/<ID>/edit
 //
-// Time-based trigger: syncTodoist() daily at 23:30
+// Time-based triggers:
+//   syncTodoist()         daily at 23:30 — the run that finalises the day
+//   syncTodoistIntraday()  hourly — refreshes today's rows while the day is still running
+//                          (self-limited to 07:00–23:00; see below)
 // AFTER SETUP: run testTodoist() once from the editor — it probes each endpoint
 // and logs the response shape, so you can confirm the v1 paths work with your
 // account before trusting the nightly run.
@@ -35,6 +38,32 @@ const TODOIST_SPREADSHEET_ID =
 	PropertiesService.getScriptProperties().getProperty(
 		"TODOIST_SPREADSHEET_ID",
 	);
+
+// Waking hours for the intraday trigger, in the script's timezone. Inclusive start,
+// exclusive end — the 23:30 nightly run owns the end of the day.
+const INTRADAY_START_HOUR = 7;
+const INTRADAY_END_HOUR = 23;
+
+// Entry point — called by the HOURLY time trigger. Apps Script's hourly trigger cannot be
+// limited to part of the day, so the window is enforced here: outside it this is a no-op.
+//
+// Exists so the dashboard's "today" view is live rather than a 23:30 snapshot — HabitDaily
+// can only score a day it has spine rows for, and those are written by this sync. Re-running
+// is safe by construction: Completions appends from a stored cursor, Overdue and
+// RecurringStatus replace today's rows, KarmaStats upserts by date, and HabitDaily rebuilds
+// its whole window from the other two tabs.
+function syncTodoistIntraday() {
+	const hour = Number(
+		Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "H"),
+	);
+	if (hour < INTRADAY_START_HOUR || hour >= INTRADAY_END_HOUR) {
+		Logger.log(
+			`Intraday sync: ${hour}:00 is outside ${INTRADAY_START_HOUR}:00–${INTRADAY_END_HOUR}:00 — skipping.`,
+		);
+		return;
+	}
+	syncTodoist();
+}
 
 // Entry point — called by the daily time trigger
 function syncTodoist() {

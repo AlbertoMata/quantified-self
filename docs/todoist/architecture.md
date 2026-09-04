@@ -31,7 +31,7 @@ intended module boundaries — they are already clean, just not enforced.
 
 ```mermaid
 flowchart TD
-    TRIG["Time trigger<br/>daily 23:30"] --> ORCH
+    TRIG["Time triggers<br/>daily 23:30<br/>hourly 07:00–23:00"] --> ORCH
 
     subgraph Entry["todoist-sync.gs — orchestrator"]
         ORCH["syncTodoist()<br/>runs each step isolated,<br/>aggregates failures"]
@@ -99,6 +99,7 @@ Entry points and core logic only; helpers are omitted.
 | Function | Role |
 | --- | --- |
 | `syncTodoist()` | Trigger entry point. Runs the five steps in isolation so one failing endpoint cannot abort the rest, collects errors, and throws a combined message at the end so failures surface in the execution dashboard. |
+| `syncTodoistIntraday()` | Hourly entry point. A no-op outside 07:00–23:00 script-local, otherwise `syncTodoist()`. Apps Script hourly triggers cannot be limited to part of the day, so the window is enforced in code. |
 | `syncOverdue()` | Writes `Overdue` from `/tasks/filter?query=overdue`. |
 | `syncKarmaStats()` | Writes `KarmaStats` from the productivity-stats endpoint. |
 | `syncRecurringStatus()` | Writes `RecurringStatus` from `/tasks/filter?query=recurring`. |
@@ -126,7 +127,9 @@ Entry points and core logic only; helpers are omitted.
 | `backfillHabitDaily()` | One-time / on demand. Same logic over ~400 days. |
 | `rebuildHabitDaily(days)` | Core, shared by both. Reads `RecurringStatus` as the spine and `Completions` as the truth, then replaces the window's rows. An empty tab widens the window to the full backfill span on its own. |
 | `habitDayStatus(date, wasCompleted, today)` | The verdict rule for one habit-day — `done` / `pending` / `missed` / `not_due` — used by the rebuild and the synthesizer alike. A day still in progress is `pending`, never a miss. |
-| `synthesizeHabitDailyHistory()` | One-time / re-runnable. Reconstructs the pre-spine grid (before 2026-08-10) from `Completions` plus each habit's `added_at`, inserted above the observed rows. Blank `due_date` marks a row as synthetic. |
+| `synthesizeHabitDailyHistory()` | One-time / re-runnable. Reconstructs the pre-spine grid (before 2026-08-10) from `Completions` plus each habit's `added_at`, inserted above the observed rows. Blank `due_date` marks a row as synthetic. Ends by re-running the backfill so the observed streaks continue the synthetic ones. |
+| `nextStreak(prev, status)` | One step of a habit's streak: `done` increments, `missed` resets, `pending`/`not_due` carry. |
+| `dueTimeOf(recurrence)` | Parses `"HH:mm"` out of a recurrence rule (`every workday at 8:30 pm` → `20:30`), `""` when it has no time. |
 | `diagnoseHabitDailySources()` | Read-only. Logs how far back each source tab reaches and how much of `RecurringStatus` carries the `habits` label — the answer to "why does my grid start on date X". |
 
 Exists because `Completions` is an event log — it contains only the days a habit *was*
@@ -201,7 +204,10 @@ down in early 2026 and now return a non-JSON deprecation notice.
 | `TODOIST_PROJECT_MAP` | CacheService, 6h | id→name |
 | `TODOIST_SECTION_MAP` | CacheService, 6h | id→name |
 
-**Schedule** — one daily time-based trigger at 23:30 calling `syncTodoist()`.
+**Schedule** — two time-based triggers: `syncTodoist()` daily at 23:30 (the run that
+finalises the day) and `syncTodoistIntraday()` hourly, which self-limits to 07:00–23:00.
+The intraday run exists so the dashboard's "today" view is live: `HabitDaily` can only
+score days the spine has rows for, and the spine is written by this sync.
 
 ---
 
@@ -269,6 +275,10 @@ this section is exhaustive where the rest of the document is brief.
 | 2026-08-20 recurrence migration | Every habit switched `every day` → `every workday`; the two Daily Reminders tasks gained recurrence and enter the grid only from that date. | Pre-migration spine rows keep the old `every day` strings; the weekend rule overrides them by design. Any future *synthesized* pre-Aug-10 spine must apply the same rest-day rule rather than trusting those historical strings. |
 | Rescheduling cannot hide a miss | The reschedule trigger fires ~20:09 nightly — before the 23:30 snapshot — bumping every skipped habit to tomorrow. Under snapshot-based due-ness this laundered every miss into `not_due` (observed live: Aug 20 – Sep 3 2026 weekdays read 0 across the board). | Contract-based due-ness (row above) eliminated the blind spot: a bumped-but-uncompleted weekday reads `missed`. Regression-tested with a bumped fixture row. |
 | Habits completed between 23:30 and midnight | Land in the following day's data. | The 7-day rebuild window exists precisely so the next run corrects them. A one-day window would lose them. |
+| Streaks are seeded, not restarted | `readStreakSeeds()` reads, per habit, the streak on its last row *below* the replace boundary; the rebuild threads forward from there. | A rebuild only writes a trailing window. Threading from 0 inside it would reset every streak to at most the window's length on each nightly run — a seven-day ceiling on a hundred-day streak. |
+| Synthesizer re-threads the observed block | `synthesizeHabitDailyHistory()` finishes by calling `rebuildHabitDaily(HABIT_DAILY_BACKFILL_DAYS)`. | The observed rows were threaded before any history existed, so they started at 0 on the spine's first day. The rebuild re-seeds them from the synthetic block; its clamp keeps the synthetic rows themselves untouched. |
+| A layout change drops synthetic history | The header guard clears the tab, and the auto-widen rebuilds only what the spine can regenerate — which is nothing before 2026-08-10. | Re-run `synthesizeHabitDailyHistory()` once after any column change. Documented in the schema next to the column list, because the loss is silent otherwise. |
+| Intraday re-runs | Every step is idempotent for the same day: Completions appends from a stored cursor, Overdue and RecurringStatus replace today's rows, KarmaStats upserts by date, HabitDaily rebuilds its window. | This is what makes an hourly trigger safe. `syncRecurringStatus`'s per-row `deleteRow` loop now runs ~17×/day; it is the frozen-header-sensitive path, but it only throws when today's rows are the *only* data rows — i.e. never after the first day. |
 | Spine row labeled after today | Rendered, but always as `not_due` with `due = 0`. | A snapshot cannot observe a day that has not happened — a future label is always a stamping artifact (seen live on 2026-08-20). What mattered was never showing tomorrow's habits as pre-emptively `missed`; the status rule guarantees that, so the row itself is harmless and stays visible. |
 | Ordering | Must run after both `Completions` and `RecurringStatus`. | Running earlier rebuilds today's grid from a spine that has no rows for today. |
 | Missing `Completions` tab | Every habit day reads as missed. Logged, no crash. | Degrades loudly rather than silently. |

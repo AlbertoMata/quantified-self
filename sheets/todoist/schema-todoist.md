@@ -145,6 +145,10 @@ Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only 
 
 **The day in progress**: today's rows read `pending`, not `missed` — the day is not over, so nothing has been skipped yet. They carry `due = 1`, `completed = 0`, and settle into `done` or `missed` on the next nightly rebuild (its 7-day window covers them). Days that have not arrived read `not_due` with `due = 0`.
 
+**Freshness**: today's rows appear as soon as a sync runs, and `syncTodoistIntraday()` runs hourly between 07:00 and 23:00 (the 23:30 nightly run finalises the day). Every step is idempotent for same-day re-runs, so the grid simply gets more accurate as the day goes on.
+
+**Streaks** (col P): the consecutive-`done` count as of that row, per habit. `done` increments, `missed` resets to 0, `pending` and `not_due` carry the previous value — a weekend, a day that has not arrived, and the day still in progress never break a streak, and a weekend check-off still increments. Computed in the sheet because Looker Studio cannot express a running count over an ordered dimension. A rebuild only touches a trailing window, so the thread is **seeded** from the last row below that window; the synthetic block therefore feeds the observed one, and `synthesizeHabitDailyHistory()` finishes by re-running the backfill so the seam is continuous.
+
 **Recurrence migration (2026-08-20)**: every habit in the Habits project switched from `every day` to `every workday`, and the two Daily Reminders tasks gained workday recurrence (they enter the spine — and this grid — only from that date). Spine rows written before the migration still carry the old `every day` strings; the weekend policy deliberately overrides them, on the grounds that weekends were never part of the contract.
 
 | # | Column | Type | Example | Notes |
@@ -163,11 +167,15 @@ Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only 
 | L | `priority` | integer 1–4 | `1` | From the spine |
 | M | `recurrence_string` | string | `every workday at 5:20 am` | The rule as of that night |
 | N | `sync_date` | YYYY-MM-DD | `2026-08-20` | When this row was last rebuilt |
+| O | `due_time` | HH:mm | `05:20` | Time of day parsed out of `recurrence_string`; empty when the rule has none. Sorts today's habits in the order they are owed |
+| P | `streak` | integer | `12` | Consecutive `done` days up to and including this row (see above) |
 
 **Header row:**
 ```
-date	task_id	habit	habit_full	section_name	labels	status	completed	due	completed_at	due_date	priority	recurrence_string	sync_date
+date	task_id	habit	habit_full	section_name	labels	status	completed	due	completed_at	due_date	priority	recurrence_string	sync_date	due_time	streak
 ```
+
+**After a layout change**: a header that does not match causes the tab to be cleared, which also removes the synthetic block. Re-run `synthesizeHabitDailyHistory()` once after the rebuild to put it back (it re-threads the observed streaks itself).
 
 **Looker tip**: pivot table with rows = `habit`, columns = `date` (the real date, so the columns stay in calendar order and each cell is one day), metric = `MAX(completed)` — or filter `status = "missed"` for the "days I skipped" table. For a red/green/neutral grid add one calculated field, `CASE WHEN status = "done" THEN 1 WHEN status = "missed" THEN -1 ELSE 0 END`, which scores `pending` and `not_due` as a neutral 0. Set the chart's date range to **This week (starts Monday)**: with a weekday-name column dimension and a range spanning several weeks, one good Tuesday paints every Tuesday. No blends; that is the point of this tab.
 

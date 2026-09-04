@@ -123,7 +123,8 @@ quantified-self/
 2. Create a standalone Apps Script project named `quantified-self-sync`
 3. Paste the six `sheets/todoist/*.gs` files and `sheets/everhour-sync.gs` into the project
 4. Set Script Properties: `TODOIST_TOKEN`, `EVERHOUR_API_KEY`, and both spreadsheet IDs
-5. Set time-based triggers: `syncTodoist` at 23:30, `syncEverhour` at 23:45
+5. Set time-based triggers: `syncTodoist` at 23:30, `syncTodoistIntraday` hourly (it
+   self-limits to 07:00–23:00, keeping today's habit grid current), `syncEverhour` at 23:45
 6. Add both sheets as data sources in Looker Studio
 
 ### Phase 1.5 — Obsidian integration

@@ -57,10 +57,18 @@
 // tasks keeps Todoist untouched and avoids fighting the Habit Tracker app over titles. The
 // untrimmed title is kept in column D so nothing is lost.
 //
+// Streaks are computed HERE, not in Looker: a running count over an ordered dimension is
+// not something Looker Studio can express. Column P holds the consecutive-done count as of
+// that row — `done` increments, `missed` resets to 0, `pending` and `not_due` carry the
+// previous value (a weekend, a day that has not arrived, and the day still in progress
+// must not break a streak). Because a rebuild only touches a trailing window, the thread
+// is SEEDED from the last row below the window: without that, every nightly run would
+// restart all streaks at 0 seven days ago.
+//
 // Sheet layout (HabitDaily):
 //   A: date  B: task_id  C: habit  D: habit_full  E: section_name  F: labels
 //   G: status  H: completed  I: due  J: completed_at  K: due_date  L: priority
-//   M: recurrence_string  N: sync_date
+//   M: recurrence_string  N: sync_date  O: due_time  P: streak
 //
 // Changing this layout invalidates existing rows, so getOrCreateHabitDailySheet() clears
 // the tab when it finds an old header rather than writing new columns over stale ones.
@@ -97,7 +105,13 @@ const HABIT_DAILY_HEADER = [
 	"priority",
 	"recurrence_string",
 	"sync_date",
+	"due_time",
+	"streak",
 ];
+
+// Column index (0-based) of `streak` in a built row — used when re-reading the tab to seed
+// the thread. Derived from the header so the two can never drift apart.
+const HABIT_DAILY_STREAK_COL = HABIT_DAILY_HEADER.indexOf("streak");
 
 // ── Public entry points ────────────────────────────────────────────────────────
 
@@ -232,6 +246,8 @@ function synthesizeHabitDailyHistory() {
 			skipped.push(h.content);
 			return;
 		}
+		// Nothing exists before a habit's floor, so its streak starts from zero there.
+		let streak = 0;
 		for (let d = floor; d <= synthEnd; d = calendarAddDays(d, 1)) {
 			const key = `${h.id}|${d}`;
 			const wasCompleted = Object.prototype.hasOwnProperty.call(
@@ -241,6 +257,7 @@ function synthesizeHabitDailyHistory() {
 			// Same verdict rule as the live grid. Every synthesized day is strictly before
 			// the spine start, so "pending" can never come out of here.
 			const status = habitDayStatus(d, wasCompleted, today);
+			streak = nextStreak(streak, status);
 			rows.push([
 				d,
 				h.id,
@@ -256,6 +273,8 @@ function synthesizeHabitDailyHistory() {
 				h.priority,
 				h.recurrence,
 				today,
+				dueTimeOf(h.recurrence),
+				streak,
 			]);
 		}
 	});
@@ -304,6 +323,11 @@ function synthesizeHabitDailyHistory() {
 				`  ${m}: ${byMonth[m].done} done of ${byMonth[m].rows} rows`,
 			);
 		});
+
+	// The observed block was threaded without this history — its streaks started at 0 on
+	// the spine's first day. Rebuild it so it seeds from the rows just written; the clamp
+	// in rebuildHabitDaily keeps the synthetic block itself untouched.
+	rebuildHabitDaily(HABIT_DAILY_BACKFILL_DAYS);
 }
 
 // Earliest snapshot day carrying the habits label — where observation begins.
@@ -399,6 +423,15 @@ function rebuildHabitDaily(days) {
 		if (earliest > replaceCutoff) replaceCutoff = earliest;
 	}
 
+	// Streak state carried in from below the replace boundary — the rows this run does not
+	// touch. Read BEFORE the replace, obviously, and keyed per habit.
+	const streak = readStreakSeeds(sheet, replaceCutoff);
+
+	// Date order is what makes the streak thread meaningful. RecurringStatus is appended a
+	// day at a time so the spine already arrives sorted, but a manual edit or a re-ordered
+	// tab would silently scramble every streak — cheap insurance for a 400-day rebuild.
+	spine.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
 	const rows = spine.map((s) => {
 		const key = `${s.taskId}|${s.date}`;
 		const wasCompleted = Object.prototype.hasOwnProperty.call(completed, key);
@@ -411,6 +444,7 @@ function rebuildHabitDaily(days) {
 		// miss or still open is habitDayStatus()'s call; everything except "not_due" is
 		// owed, which keeps a rest-day check-off at due = 1.
 		const status = habitDayStatus(s.date, wasCompleted, today);
+		streak[s.taskId] = nextStreak(streak[s.taskId] || 0, status);
 		return [
 			s.date,
 			s.taskId,
@@ -426,6 +460,8 @@ function rebuildHabitDaily(days) {
 			s.priority,
 			s.recurrence,
 			today,
+			dueTimeOf(s.recurrence),
+			streak[s.taskId],
 		];
 	});
 
@@ -452,6 +488,35 @@ function rebuildHabitDaily(days) {
 // future label is always a stamping artifact (syncRecurringStatus used to format "today"
 // in UTC, which after 18:00 local is already tomorrow); showing tomorrow's habits as
 // pre-emptively missed was the thing worth preventing, not the row itself.
+// Streak values to continue from: for each habit, the streak on its LAST row dated before
+// `cutoff` — the newest row this rebuild will not overwrite. A habit with no earlier row
+// (or an empty/just-cleared tab) starts at 0.
+//
+// This is what keeps the nightly 7-day window and a 400-day backfill in agreement. It is
+// also how the synthesized pre-spine block feeds the observed one: those rows sit below
+// every rebuild's clamped boundary, so their final streak is the seed.
+function readStreakSeeds(sheet, cutoff) {
+	const seeds = {};
+	if (sheet.getLastRow() < 2) return seeds;
+	const data = sheet
+		.getRange(2, 1, sheet.getLastRow() - 1, HABIT_DAILY_HEADER.length)
+		.getValues();
+	const seedDay = {};
+	for (let i = 0; i < data.length; i++) {
+		const date = dateKey(data[i][0]);
+		if (!date || date >= cutoff) continue;
+		const id = String(data[i][1] || "");
+		if (!id) continue;
+		// Rows arrive in date order in practice; compare anyway so a re-sorted tab
+		// cannot seed from an older row.
+		if (seedDay[id] && seedDay[id] > date) continue;
+		seedDay[id] = date;
+		const raw = data[i][HABIT_DAILY_STREAK_COL];
+		seeds[id] = typeof raw === "number" ? raw : parseInt(raw, 10) || 0;
+	}
+	return seeds;
+}
+
 function readHabitSpine(spineSheet, cutoff) {
 	const data = spineSheet.getDataRange().getValues();
 	const out = [];
@@ -630,6 +695,33 @@ function habitDayStatus(dateStr, wasCompleted, today) {
 	if (dateStr > today) return "not_due"; // hasn't happened; cannot be a miss
 	if (isRestDay(dateStr)) return "not_due";
 	return dateStr === today ? "pending" : "missed";
+}
+
+// The time of day a recurrence rule fires, as "HH:mm" (24h), or "" when the rule carries
+// no time ("every workday"). Todoist keeps it inside the human-readable rule string —
+// "every workday at 8:30 pm" — which sorts alphabetically, so the grid stores the parsed
+// value instead: Looker cannot order a day's habits by a phrase.
+function dueTimeOf(recurrence) {
+	const m = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(
+		String(recurrence || ""),
+	);
+	if (!m) return "";
+	let hour = parseInt(m[1], 10);
+	const minute = m[2] ? parseInt(m[2], 10) : 0;
+	const meridiem = (m[3] || "").toLowerCase();
+	if (hour > 23 || minute > 59) return "";
+	if (meridiem === "pm" && hour < 12) hour += 12;
+	if (meridiem === "am" && hour === 12) hour = 0; // 12:30 am is 00:30
+	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+// One step of a habit's streak: the consecutive-done count carried from the previous day.
+// `pending` and `not_due` carry rather than break — a weekend, a future day, and the day
+// still in progress are not failures, and a weekend check-off still increments.
+function nextStreak(prev, status) {
+	if (status === "done") return prev + 1;
+	if (status === "missed") return 0;
+	return prev;
 }
 
 // completed_at as a YYYY-MM-DD in the SCRIPT's timezone. The stored value is UTC, so a
