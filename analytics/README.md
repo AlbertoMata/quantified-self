@@ -17,8 +17,13 @@ Add these as separate data sources in Looker Studio (one per tab):
 | QS - Karma | quantified-self-todoist | KarmaStats |
 | QS - Time Entries | quantified-self-everhour | TimeEntries |
 | QS - Daily Summary | quantified-self-everhour | DailySummary |
+| QS - HabitDaily | quantified-self-todoist | HabitDaily |
+| QS - RecurringStatus | quantified-self-todoist | RecurringStatus |
 
 **To add each**: Looker Studio → Add data → Google Sheets → select the sheet → select the tab → Add.
+
+The last two power the **Habits** page — a separate build, since it has its own calculated
+fields, layout, and filters. See [`habits-page.md`](habits-page.md) for the full recipe.
 
 ---
 
