@@ -1,9 +1,11 @@
 # Habits page in Looker Studio — design
 
-**Status** (2026-09-04): **Part 1 implemented** — `due_time` and `streak` columns, the
-streak thread with window seeding, and the hourly `syncTodoistIntraday()` entry point are
-in the scripts and covered by the harness. **Parts 2 and 3 are not built**: the Looker page
-and the `optional` labels in Todoist are still to do.
+**Status** (2026-09-06): **Parts 1 and 2 implemented** — `due_time` and `streak` columns,
+the streak thread with window seeding, and the hourly `syncTodoistIntraday()` entry point
+are in the scripts and covered by the harness; the Looker Studio build recipe is in
+[`../../analytics/habits-page.md`](../../analytics/habits-page.md), linked from
+`analytics/README.md`. **Part 3 is not built**: the `optional` labels in Todoist are still
+to do (someone has to apply them in Todoist itself — there is no script change).
 
 The goal is one Looker Studio page, **Habits**, with three sections serving two moods:
 *pressure* during the day and week (what is still open, am I keeping cadence) and *pride*

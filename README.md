@@ -90,7 +90,8 @@ quantified-self/
 │       ├── todoist-habit-daily.gs         # HabitDaily grid + one-time history synthesis
 │       └── todoist-reschedule-habits.gs   # Manual: bump skipped habits (writes back)
 ├── analytics/
-│   └── README.md                # Looker Studio 4-source blend setup
+│   ├── README.md                # Looker Studio 4-source blend setup
+│   └── habits-page.md           # Habits page build recipe (HabitDaily-driven)
 ├── obsidian/
 │   ├── README.md                # Custom Frames + daily note integration guide
 │   └── daily-note-template.md   # Templater template (copy into your vault)
