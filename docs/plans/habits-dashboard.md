@@ -4,8 +4,17 @@
 the streak thread with window seeding, and the hourly `syncTodoistIntraday()` entry point
 are in the scripts and covered by the harness; the Looker Studio build recipe is in
 [`../../analytics/habits-page.md`](../../analytics/habits-page.md), linked from
-`analytics/README.md`. **Part 3 is not built**: the `optional` labels in Todoist are still
-to do (someone has to apply them in Todoist itself — there is no script change).
+`analytics/README.md`. **Section 1 (Today) is now built in Looker** — page *Performance*,
+with the daily gauge, the Done / Due, Owed Today, Still Open and Remaining to Target cards,
+and the Pending table; Sections 2 (This week) and 3 (This month) are still to build.
+**Part 3 is not built**: the `optional` labels in Todoist are still to do (someone has to
+apply them in Todoist itself — there is no script change).
+
+The daily gauge is the one chart on the page whose target does *not* follow `target_pct`:
+Looker Studio gauges take typed constants for their axis, range limits and target value —
+no field, metric or parameter — so its `26` axis and `21` target are hand-maintained. The
+trade-off, the rejected alternatives, and the upkeep are recorded in the recipe's §2, §6
+and §7.
 
 The goal is one Looker Studio page, **Habits**, with three sections serving two moods:
 *pressure* during the day and week (what is still open, am I keeping cadence) and *pride*
