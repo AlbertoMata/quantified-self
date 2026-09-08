@@ -60,11 +60,53 @@ chart:
 | `missed_count` | `SUM(CASE WHEN status="missed" THEN 1 ELSE 0 END)` | This week scorecard |
 | `done_count` | `SUM(CASE WHEN status="done" THEN 1 ELSE 0 END)` | Today + This week + This month scorecards |
 | `iso_weekday` | `FORMAT_DATETIME("%u-%a", date)` | month heatmap columns (Mon=1) |
-| `iso_week` | `ISOWEEK(date)` | month heatmap rows |
 | `target_pct` | parameter, type **Number**, default `0.8` | reference lines, and the two fields below |
 | `rate_vs_target` | `rate - target_pct` | the coloured scorecard and the per-habit bar — colour rules compare it to `0` |
 | `attainment` | `rate / target_pct` | the gauge — `1.0` is exactly on target |
 | `to_target` | `CEIL(target_pct * SUM(due)) - SUM(completed)` | Today's "Remaining to Target" card — check-offs still needed |
+
+**There is no `iso_week` calculated field — use built-in granularity
+instead.** On this data source Looker Studio rejects `ISOWEEK(date)` with
+`Unsupported operator: ISOWEEK`. `EXTRACT`-family functions (`ISOWEEK`,
+`ISOYEAR`, `WEEK`, `DAYOFWEEK`, …) are documented as unavailable for
+compatibility mode date types, and `HabitDaily` writes `date` as a
+`YYYY-MM-DD` string, which is how the Sheets connector comes to type it that
+way.
+
+Tested behaviour on this source, which is narrower than that rule would
+suggest:
+
+| Formula | Result |
+| --- | --- |
+| `ISOWEEK(date)` | **Rejected** — `Unsupported operator: ISOWEEK` |
+| `FORMAT_DATETIME("%u-%a", date)` | **Works** — `iso_weekday` needs no workaround |
+
+So only the `EXTRACT` family is actually blocked here; `FORMAT_DATETIME` is
+fine on the same field. Do **not** add a caveat to `iso_weekday` — it saves
+as written.
+
+For the heatmap rows, skip the calculated field: use `date` itself as the
+pivot's **row dimension** and set its granularity to **ISO Year Week** in
+the chart's field settings. Granularity is a property of the dimension, not
+a function call, so it sidesteps the operator restriction entirely — and
+compatibility mode dates expose both a Format Type and a Granularity option
+precisely for this.
+
+Two things deliberately *not* recommended, so they are not retried:
+
+- **Retyping `date` to a semantic Date** in the data source may well make
+  `ISOWEEK` available, but it is untested here and it buys nothing the
+  granularity setting does not already give. It would also be a change to a
+  field every other chart on the page already reads.
+- **`FORMAT_DATETIME("%V", date)`** looks like the obvious substitute, given
+  `%u` works. Google's own forums report `%V` misbehaving in Looker Studio's
+  date functions, so it is not worth the risk for a row label the
+  granularity picker produces natively.
+
+The built-in granularity does not rescue `iso_weekday`, which is why that
+field still exists: the *Day of Week* granularity returns day names, and
+those sort alphabetically (Fri, Mon, Sat…). The `%u-` prefix is there to
+force Mon→Sun order.
 
 **Adding the `target_pct` parameter**: data source editor → **Add a
 parameter** → name `target_pct` → type Number → default value `0.8`. It
@@ -145,7 +187,10 @@ empty.)
   `not_due`, so the whole section legitimately reads zero — the label is
   what stops that from looking like a collapse.
 - **Table** "Pending": dimensions `section_name` (renamed **Day's Moment**),
-  `due_time`, `habit`, `status`, `streak`; sort by `due_time` ascending;
+  `due_time`, `habit`, `status`, `streak`; sort by `due_time` ascending — this
+  is a **text** sort, which is correct only because the column is written
+  zero-padded (`05:10`, not `5:10`); see the troubleshooting row if 20:30 ever
+  climbs above 5:10 again;
   conditional formatting on `status` (`pending` amber, `done` green,
   `missed` red). Two chart-level filters:
   - `due = 1` — so a rest day renders an empty table instead of listing
@@ -176,8 +221,8 @@ That is why its two numbers are typed constants rather than fields.
 | Element | Means | Caveat |
 | --- | --- | --- |
 | Needle | Check-offs completed today, as a whole number | Counts `done` rows only — `pending` earns no partial credit, so the needle climbs through the day and is only final after midnight |
-| Axis max `26` | The full habit roster, a fixed yardstick — *not* today's denominator | Hand-maintained. Re-tune it whenever a habit is added to or archived in Todoist, or the dial silently rescales against a roster that no longer exists |
-| Target tick `21` | What a good weekday looks like, roughly 80% of the roster | Hand-maintained, and it **assumes a full weekday**. On a weekend, a rest day, or any light day, the needle sits far left of the tick even though nothing was missed — read "Owed Today" before reading the gauge as a failure |
+| Axis max `26` | The full habit roster, a fixed yardstick — *not* today's denominator | Hand-maintained. Re-tune it whenever a habit is added to or archived in Todoist, or the dial silently rescales against a roster that no longer exists. **It must also match the roster the gauge can actually see**: with the `habit_type = core` filter applied, 7 of the 26 habits are `optional` and never counted, so the honest axis is `19` |
+| Target tick `21` | What a good weekday looks like, roughly 80% of the roster | Hand-maintained, and it **assumes a full weekday**. On a weekend, a rest day, or any light day, the needle sits far left of the tick even though nothing was missed — read "Owed Today" before reading the gauge as a failure. A target above the visible roster is **unreachable**, which is why it moves to `16` alongside the `19` axis |
 
 That last caveat is the price of keeping an integer dial, and it is
 deliberate: the target tick cannot be made to follow `target_pct`, for the
@@ -233,8 +278,10 @@ supported.
   ascending) and add conditional formatting on that metric: `< 0` red,
   `>= 0` green — bar charts do support conditional formatting, under the
   same compare-to-a-constant limit.
-- **Pivot table** (calendar heatmap): row dimension `iso_week`, column
-  dimension `iso_weekday`, metric `rate`.
+- **Pivot table** (calendar heatmap): row dimension `date` with its
+  granularity set to **ISO Year Week** (not a calculated field — see
+  [§2](#2-calculated-fields-on-qs---habitdaily)), column dimension
+  `iso_weekday`, metric `rate`.
 - **Line chart**: dimension `date`, metric `rate`, reference line at
   `target_pct`.
 
@@ -327,8 +374,14 @@ so they drift unless someone edits them.
 
 | Where | Current | What it represents | Re-tune when |
 | --- | --- | --- | --- |
-| Section 1 gauge → Style → Axis max (and the single range limit) | `26` | The full habit roster | A habit is added to, or archived in, Todoist. Check it against `COUNT_DISTINCT(task_id)` over a recent full weekday |
-| Section 1 gauge → Style → Target value | `21` | A good weekday, ~80% of the roster | The definition of a good day changes, or the roster has moved enough that `21` is no longer close to `target_pct` × the roster |
+| Section 1 gauge → Style → Axis max (and the single range limit) | `19` | The **core** habit roster — 26 habits less the 7 labelled `optional` | A habit is added to, or archived in, Todoist, or an `optional` label is added or removed. Check it against `COUNT_DISTINCT(task_id)` over a recent full weekday **with the `habit_type = core` filter applied** |
+| Section 1 gauge → Style → Target value | `16` | A good weekday: `CEIL(0.8 × 19)`, i.e. `target_pct` × the core roster | The definition of a good day changes, or the roster has moved enough that `16` is no longer close to `target_pct` × the roster |
+
+Both were originally set to `26` / `21` against the full 26-habit roster, before the
+`optional` labels existed. Once 7 habits carry `optional` and the section filters to
+`habit_type = core`, a target of `21` can never be reached — only 19 habits are ever
+owed — and the axis overstates the roster by 7. "Remaining to Target" reading `16` on a
+full weekday is the cross-check that these two are right.
 
 Keep the target roughly in step with `target_pct`: if you raise the
 parameter to `0.9`, the gauge tick should move too, or the dial and the
@@ -341,8 +394,10 @@ day.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `due_time` shows `null` for every row | `dueTimeOf()` returns `""` when a recurrence rule carries no time of day (`every day` has none; `every day at 09:10 am` does), and Looker renders an empty dimension value as `null` | Nothing — expected. See [`due_time` in the schema](../sheets/todoist/schema-todoist.md). To hide it, set the field's **Missing data** style to blank, or add the time to the Todoist recurrence rule |
+| A morning habit sorts *below* an evening one (20:30 above 5:10) | `due_time` is text, and text sorts lexicographically — `"2"` < `"5"`. It only sorts chronologically while every value is zero-padded to `HH:mm`. Left on the default General format, Sheets parses `"05:10"` on the way in and stores a time **number**, which serialises back to the connector as the unpadded `"5:10"` | Fixed in the script: `pinDueTimeColumnToText()` pins column O to plain text (`@`) on every run, so the padding survives the write. Deploy it, then run `backfillHabitDaily()` once — the format governs only rows written after it, so existing rows keep their old values until rewritten |
+| `due_time` shows `null` for some rows | The habit is genuinely all-day: neither its recurrence rule nor its due date carries a time, and Looker renders an empty dimension value as `null`. Four habits are legitimately in this state | Nothing — expected. See [`due_time` in the schema](../sheets/todoist/schema-todoist.md). To hide it, set the field's **Missing data** style to blank, or give the Todoist task a time. Note blanks sort **first** ascending, so all-day habits head the table |
 | Every `streak` reads `0` | The `HABIT_DAILY_HEADER` layout guard in `getOrCreateHabitDailySheet()` cleared the tab on deploy, which drops the synthetic history the streaks are threaded from | Re-run `backfillHabitDaily()`, then `synthesizeHabitDailyHistory()` once, in that order |
 | Today section is empty in the morning | The day's rows are written by the hourly `syncTodoistIntraday()` run, which self-limits to 07:00–23:00 | Nothing before 07:00. After that, check the hourly trigger is installed |
 | "Done / Due" comparison reads `N/A` | The comparison is a percentage against `SUM(due)`, and today's denominator is `0` | Nothing — it is a rest day. "Owed Today" reading `0` confirms it |
+| `Unsupported operator: ISOWEEK` when saving a calculated field | The `EXTRACT` family (`ISOWEEK`, `ISOYEAR`, `WEEK`, `DAYOFWEEK`, …) is not available for compatibility mode date types, and `date` reaches the connector as a `YYYY-MM-DD` string | Don't write the field. Use `date` as the dimension and set its granularity to **ISO Year Week** (see [§2](#2-calculated-fields-on-qs---habitdaily)). Note this is `EXTRACT`-only — `FORMAT_DATETIME` works fine on the same field, so `iso_weekday` needs no workaround |
 | A rate chart ignores the `habit_type` control | Rate charts carry their own chart-level `habit_type = core` filter by design (see [§4](#4-filters-top-of-page-apply-to-all-sections)) | Remove the chart-level filter if you want the control to reach it |

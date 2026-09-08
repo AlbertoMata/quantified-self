@@ -167,7 +167,7 @@ Fully **derived, sheet-to-sheet** — the nightly path makes no API calls; only 
 | L | `priority` | integer 1–4 | `1` | From the spine |
 | M | `recurrence_string` | string | `every workday at 5:20 am` | The rule as of that night |
 | N | `sync_date` | YYYY-MM-DD | `2026-08-20` | When this row was last rebuilt |
-| O | `due_time` | HH:mm | `05:20` | Time of day parsed out of `recurrence_string`; empty when the rule has none. Sorts today's habits in the order they are owed |
+| O | `due_time` | HH:mm | `05:20` | Time of day the habit is owed. Parsed from `recurrence_string` first — matching both spellings Todoist stores, `at 5:25 am` and `@ 5:25 am` — then falling back to the clock time on `due_date` for rules that read bare (`every workday`) on a task that is nonetheless timed. Empty only when the habit is genuinely all-day, which Looker renders as `null`. Written **zero-padded** and the column is pinned to plain text (`pinDueTimeColumnToText()`) so Sheets cannot re-parse it into a time number: the padding is what makes a lexicographic sort chronological, and without it `20:30` sorts above `5:10`. Sorts today's habits in the order they are owed |
 | P | `streak` | integer | `12` | Consecutive `done` days up to and including this row (see above) |
 
 **Header row:**

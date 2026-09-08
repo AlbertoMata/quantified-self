@@ -100,7 +100,13 @@ click-by-click. `analytics/README.md` gets the two missing data sources
 | `habit_type` | `IF(CONTAINS_TEXT(labels, "optional"), "optional", "core")` | filter control + default filters |
 | `pending_count` / `missed_count` / `done_count` | `SUM(IF(status="pending",1,0))` etc. | Today + week scorecards |
 | `iso_weekday` | `FORMAT_DATETIME("%u-%a", date)` (Mon=1) | month heatmap columns |
-| `iso_week` | `ISOWEEK(date)` | month heatmap rows |
+
+**`iso_week` was dropped**: Looker Studio rejects `ISOWEEK(date)` on this source with
+`Unsupported operator: ISOWEEK` — the `EXTRACT` family is unavailable for compatibility mode
+date types, and `date` reaches the connector as a `YYYY-MM-DD` string. The heatmap rows use
+`date` with its granularity set to **ISO Year Week** instead, which needs no calculated
+field. This is `EXTRACT`-only: `FORMAT_DATETIME` works on the same field, so `iso_weekday`
+stands as written. The recipe's §2 carries the detail.
 | `target_pct` | **parameter**, number, default `0.8` | gauges, reference lines |
 | `rate_vs_target` | `rate - target_pct` | conditional colouring (green ≥ 0) |
 
@@ -134,7 +140,8 @@ since the sections must not share one.
   `streak`, sorted desc (today's row carries the streak during the day).
 - Bar (horizontal): `habit` × `rate`, sorted desc, coloured by `rate_vs_target`, reference
   line at `target_pct`.
-- Heatmap pivot: rows = `iso_week`, columns = `iso_weekday`, metric = `rate` — the calendar.
+- Heatmap pivot: rows = `date` at **ISO Year Week** granularity, columns = `iso_weekday`,
+  metric = `rate` — the calendar.
 - Line: `date` × `rate` with a reference line at `target_pct`.
 
 ### Filters (top of page, apply to all sections)

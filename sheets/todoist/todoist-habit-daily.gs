@@ -57,6 +57,14 @@
 // tasks keeps Todoist untouched and avoids fighting the Habit Tracker app over titles. The
 // untrimmed title is kept in column D so nothing is lost.
 //
+// due_time (column O) has TWO sources, tried in that order. The recurrence string is the
+// rule and wins when it carries a time ("every workday at 8:30 pm"); the due date's own
+// clock time is the fallback for habits whose rule reads bare ("every workday") while the
+// task itself is timed. Neither alone is enough: the rule is missing a time for a handful
+// of habits, and the due date is a snapshot that the reschedule trigger bumps. See
+// dueTimeOf() and clockTimeOf(). An all-day habit legitimately has no due_time, which
+// Looker renders as "null".
+//
 // Streaks are computed HERE, not in Looker: a running count over an ordered dimension is
 // not something Looker Studio can express. Column P holds the consecutive-done count as of
 // that row — `done` increments, `missed` resets to 0, `pending` and `not_due` carry the
@@ -112,6 +120,9 @@ const HABIT_DAILY_HEADER = [
 // Column index (0-based) of `streak` in a built row — used when re-reading the tab to seed
 // the thread. Derived from the header so the two can never drift apart.
 const HABIT_DAILY_STREAK_COL = HABIT_DAILY_HEADER.indexOf("streak");
+
+// Column index (0-based) of `due_time`, for pinning that column to plain text.
+const HABIT_DAILY_DUE_TIME_COL = HABIT_DAILY_HEADER.indexOf("due_time");
 
 // ── Public entry points ────────────────────────────────────────────────────────
 
@@ -273,7 +284,7 @@ function synthesizeHabitDailyHistory() {
 				h.priority,
 				h.recurrence,
 				today,
-				dueTimeOf(h.recurrence),
+				dueTimeOf(h.recurrence) || clockTimeOf(h.dueAt),
 				streak,
 			]);
 		}
@@ -360,6 +371,7 @@ function fetchLiveHabits() {
 			labels: Array.isArray(t.labels) ? t.labels : [],
 			priority: t.priority || 1,
 			recurrence: t.due ? t.due.string || "" : "",
+			dueAt: t.due ? t.due.date || "" : "",
 			addedDay: localDayOf(t.added_at || t.addedAt || ""),
 		};
 	});
@@ -460,7 +472,7 @@ function rebuildHabitDaily(days) {
 			s.priority,
 			s.recurrence,
 			today,
-			dueTimeOf(s.recurrence),
+			dueTimeOf(s.recurrence) || clockTimeOf(s.dueAt),
 			streak[s.taskId],
 		];
 	});
@@ -534,6 +546,8 @@ function readHabitSpine(spineSheet, cutoff) {
 			labels: labels,
 			priority: r[6] || 1,
 			dueDate: dateKey(r[7]),
+			// Raw, NOT dateKey()'d: the time component is the due_time fallback.
+			dueAt: r[7],
 			recurrence: String(r[8] || ""),
 		});
 	}
@@ -589,7 +603,28 @@ function getOrCreateHabitDailySheet(ss) {
 		sheet.clear();
 		writeHabitDailyHeader(sheet);
 	}
+	pinDueTimeColumnToText(sheet);
 	return sheet;
+}
+
+// due_time is written as zero-padded "HH:mm" TEXT and has to STAY text.
+//
+// Left on the default General format, Sheets parses "05:10" on the way in and stores a
+// time NUMBER instead; the cell then serialises as "5:10", and the Looker connector reads
+// that back as an unpadded string. A table sorted on it puts 20:30 ABOVE 5:10, because as
+// text "2" < "5" — which is the whole bug. Zero-padded 24-hour times sort lexicographically
+// in true chronological order, so the padding is load-bearing and must survive the write.
+//
+// Pinning the column to "@" (plain text) is what preserves it. Applied on every run rather
+// than once: sheet.clear() drops formats along with values, so a layout change would
+// silently undo it. Cheap and idempotent.
+//
+// NOTE: this only governs rows written from here on. Rows already stored as time numbers
+// keep their value and will show the raw fraction under a text format — re-run
+// backfillHabitDaily() once after deploying this to rewrite them.
+function pinDueTimeColumnToText(sheet) {
+	const col = HABIT_DAILY_DUE_TIME_COL + 1;
+	sheet.getRange(1, col, sheet.getMaxRows(), 1).setNumberFormat("@");
 }
 
 function writeHabitDailyHeader(sheet) {
@@ -701,8 +736,15 @@ function habitDayStatus(dateStr, wasCompleted, today) {
 // no time ("every workday"). Todoist keeps it inside the human-readable rule string —
 // "every workday at 8:30 pm" — which sorts alphabetically, so the grid stores the parsed
 // value instead: Looker cannot order a day's habits by a phrase.
+//
+// BOTH spellings have to be matched. Todoist echoes a rule back with whatever
+// separator it was typed with, so "every workday @ 5:25 am" and "every workday
+// at 5:25 am" are the same rule stored two ways; matching only "at" silently
+// blanked due_time for five habits (Make The Bed, Get Calm, Get Dressed For The
+// Gym, Motivate Yourself, Take a Shower). "at" keeps a \b on BOTH sides so the
+// "at" inside "Saturday" can never match.
 function dueTimeOf(recurrence) {
-	const m = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(
+	const m = /(?:\bat\b|@)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i.exec(
 		String(recurrence || ""),
 	);
 	if (!m) return "";
@@ -712,6 +754,39 @@ function dueTimeOf(recurrence) {
 	if (hour > 23 || minute > 59) return "";
 	if (meridiem === "pm" && hour < 12) hour += 12;
 	if (meridiem === "am" && hour === 12) hour = 0; // 12:30 am is 00:30
+	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+// The clock time carried by a due DATE, as "HH:mm", or "" for an all-day date.
+// The fallback for a habit whose time of day never made it into the recurrence
+// string: "Wash your face" is due at 20:30 every workday but its rule reads
+// plainly "every workday", so dueTimeOf() has nothing to parse. The v1 API
+// returns due.date as a local floating datetime ("2026-08-17T05:10:00") when a
+// time is set and a bare date otherwise — exactly the distinction this needs.
+//
+// Two input shapes reach here: a raw API string (fetchLiveHabits) and a Sheets
+// cell already coerced to a Date (readHabitSpine). They are handled separately
+// on purpose — routing a bare "2026-09-07" through new Date() would parse it as
+// UTC midnight and, in a UTC-behind timezone, report a due time of 18:00 the day
+// before (the trap isRestDay() documents). The string branch therefore reads the
+// digits and never constructs a Date.
+function clockTimeOf(value) {
+	if (!value) return "";
+	if (value instanceof Date) {
+		const hhmm = Utilities.formatDate(
+			value,
+			Session.getScriptTimeZone(),
+			"HH:mm",
+		);
+		// An all-day cell is stored as midnight, so midnight has to
+		// read as "no time". A habit due at exactly 00:00 is not a thing.
+		return hhmm === "00:00" ? "" : hhmm;
+	}
+	const m = /[T ](\d{1,2}):(\d{2})/.exec(String(value));
+	if (!m) return ""; // "2026-09-07" — all-day, no time of day to carry
+	const hour = parseInt(m[1], 10);
+	const minute = parseInt(m[2], 10);
+	if (hour > 23 || minute > 59) return "";
 	return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
