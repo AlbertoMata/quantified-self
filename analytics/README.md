@@ -53,6 +53,9 @@ Looker Studio's **Blend Data** feature joins sources on `date`. Use a **left joi
 | `focus_vs_time` | QS - Log (focus_end) | QS - Daily Summary | `date` | Focus block minutes vs billable hours |
 | `habit_vs_sleep` | QS - Completions | QS - Health | `date` | Habit streak vs sleep quality |
 
+Todoist-specific recipes — the parent-task self-blend, the Everhour time-per-task chain,
+and the karma/health join — are in [`todoist-blends.md`](todoist-blends.md).
+
 ---
 
 ## Suggested charts

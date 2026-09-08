@@ -1,7 +1,7 @@
 # Habits page — Looker Studio build recipe
 
 A single Looker Studio page built entirely on `HabitDaily`
-(see [`../sheets/todoist/schema-todoist.md`](../sheets/todoist/schema-todoist.md#tab-5-habitdaily)).
+(see [`../sheets/todoist/schema/habit-daily.md`](../sheets/todoist/schema/habit-daily.md)).
 No code ships for this part — Looker has nothing to commit — so this doc is
 the build recipe, precise enough to follow click-by-click. Rebuild from here
 if the page is ever lost or needs to be recreated from scratch.
@@ -395,7 +395,7 @@ day.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | A morning habit sorts *below* an evening one (20:30 above 5:10) | `due_time` is text, and text sorts lexicographically — `"2"` < `"5"`. It only sorts chronologically while every value is zero-padded to `HH:mm`. Left on the default General format, Sheets parses `"05:10"` on the way in and stores a time **number**, which serialises back to the connector as the unpadded `"5:10"` | Fixed in the script: `pinDueTimeColumnToText()` pins column O to plain text (`@`) on every run, so the padding survives the write. Deploy it, then run `backfillHabitDaily()` once — the format governs only rows written after it, so existing rows keep their old values until rewritten |
-| `due_time` shows `null` for some rows | The habit is genuinely all-day: neither its recurrence rule nor its due date carries a time, and Looker renders an empty dimension value as `null`. Four habits are legitimately in this state | Nothing — expected. See [`due_time` in the schema](../sheets/todoist/schema-todoist.md). To hide it, set the field's **Missing data** style to blank, or give the Todoist task a time. Note blanks sort **first** ascending, so all-day habits head the table |
+| `due_time` shows `null` for some rows | The habit is genuinely all-day: neither its recurrence rule nor its due date carries a time, and Looker renders an empty dimension value as `null`. Four habits are legitimately in this state | Nothing — expected. See [`due_time` in the schema](../sheets/todoist/schema/habit-daily.md). To hide it, set the field's **Missing data** style to blank, or give the Todoist task a time. Note blanks sort **first** ascending, so all-day habits head the table |
 | Every `streak` reads `0` | The `HABIT_DAILY_HEADER` layout guard in `getOrCreateHabitDailySheet()` cleared the tab on deploy, which drops the synthetic history the streaks are threaded from | Re-run `backfillHabitDaily()`, then `synthesizeHabitDailyHistory()` once, in that order |
 | Today section is empty in the morning | The day's rows are written by the hourly `syncTodoistIntraday()` run, which self-limits to 07:00–23:00 | Nothing before 07:00. After that, check the hourly trigger is installed |
 | "Done / Due" comparison reads `N/A` | The comparison is a percentage against `SUM(due)`, and today's denominator is `0` | Nothing — it is a rest day. "Owed Today" reading `0` confirms it |

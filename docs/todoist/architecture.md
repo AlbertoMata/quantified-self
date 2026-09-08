@@ -5,8 +5,9 @@ Written to be read by someone porting this functionality to another language or
 framework: what the modules are, what they talk to, what state they keep, and which
 behaviours are load-bearing rather than incidental.
 
-Column-level detail for each sheet tab lives in
-[`schema-todoist.md`](../../sheets/todoist/schema-todoist.md) and is not repeated here.
+Column-level detail — and the per-tab data semantics a port must reproduce — lives in the
+schema docs indexed by [`sheets/todoist/README.md`](../../sheets/todoist/README.md) and is
+not repeated here.
 
 ---
 
@@ -117,7 +118,7 @@ Entry points and core logic only; helpers are omitted.
 
 | Function | Role |
 | --- | --- |
-| `fetchSectionMovementCompletions()` | Source 3. Returns every task currently sitting in an "In Review" section of a target project, shaped like a completion event. A **state snapshot**, not an event stream — see §7. |
+| `fetchSectionMovementCompletions()` | Source 3. Returns every task currently sitting in an "In Review" section of a target project, shaped like a completion event. A **state snapshot**, not an event stream — see [`schema/completions.md`](../../sheets/todoist/schema/completions.md#in-review). |
 
 ### `todoist-habit-daily.gs` — the `HabitDaily` grid
 
@@ -229,70 +230,29 @@ The Apps Script couplings that need a deliberate replacement, and why each matte
 ## 7. Edge cases and known limitations
 
 Most of this was discovered by testing against the live API rather than by reading the
-docs. A reimplementation that misses these compiles cleanly and corrupts data quietly, so
-this section is exhaustive where the rest of the document is brief.
+docs. A reimplementation that misses these compiles cleanly and corrupts data quietly.
 
-### Completions
+**Per-tab behaviour lives with the tab.** Each schema doc below carries an exhaustive
+"Behaviour and edge cases" table for its own tab — read them; they are not optional colour.
+Only the two cross-cutting cases, belonging to no single tab, remain in this section.
 
-| Case | Behaviour | Why it matters |
-| --- | --- | --- |
-| Source disjointness | A recurring check-off **never** appears in `/tasks/completed/by_completion_date`; it appears only in `/activities`. | The two sources cannot overlap, which is what removes the need for a fragile cross-endpoint join. |
-| `due_date` on an activity event | Already advanced to the **next** occurrence. The occurrence actually completed is `completed_due_date`. | Reading `due_date` dates every habit completion one occurrence into the future — a day for daily habits, a whole weekend for workday ones. |
-| Missing fields in `extra_data` | `labels` is omitted entirely for a task that has none. Project arrives as top-level `parent_project_id`, parent as top-level `parent_item_id` — **not** inside `extra_data`. | An empty labels cell is not cosmetic: it silently zeroes the habit count. |
-| Live-task enrichment | Backfills fields the event omitted, by reading the task as it exists now. | Sound **only** because recurring tasks survive completion. The same fallback on a one-off completion would read the wrong task or nothing at all. |
-| Completion with no `task_id` | Dropped, not stored. | Avoids junk rows that can never be joined. |
-| Empty sheet | Cursor is ignored and the full 90-day window is pulled. | Makes "clear the sheet to re-backfill" work. The window is clamped to the API's ~3-month max regardless. |
-| Cursor write ordering | `setPrevInReviewIds()` and `setLastSyncTime()` run **after** the row write. | A thrown write is retried next run instead of advancing the baseline and losing rows permanently. |
+| Tab | Edge cases documented in |
+| --- | --- |
+| `Completions` (including the In Review source) | [`schema/completions.md`](../../sheets/todoist/schema/completions.md#behaviour-and-edge-cases) |
+| `Overdue` | [`schema/overdue.md`](../../sheets/todoist/schema/overdue.md#behaviour-and-edge-cases) |
+| `KarmaStats` | [`schema/karma-stats.md`](../../sheets/todoist/schema/karma-stats.md) |
+| `RecurringStatus` | [`schema/recurring-status.md`](../../sheets/todoist/schema/recurring-status.md#behaviour-and-edge-cases) |
+| `HabitDaily` | [`schema/habit-daily.md`](../../sheets/todoist/schema/habit-daily.md#behaviour-and-edge-cases) |
 
-### In Review
+Two more cross-cutting documents a port must read alongside them:
 
-| Case | Behaviour | Why it matters |
-| --- | --- | --- |
-| Section moves in the event stream | Invisible — `item:updated` carries only content/description deltas, never `section_id`. | This is why In Review is a snapshot diff rather than an event source. The earlier event-based approach filtered on a field that is never present and returned zero rows. |
-| First run | Previous set is empty, so every task currently in In Review is backfilled with that day's date. | Delete those rows manually if only true go-forward moves are wanted. |
-| Enter and leave between runs | Missed entirely. | Nightly granularity is the ceiling. |
-| Leave and re-enter | Counted again. | Intentional, but a rewrite should know it is a choice. |
-| `completed_at` | Set to detection time. | The API exposes no actual move timestamp. |
+- [`history.md`](../../sheets/todoist/history.md) — the dated seams in the stored data
+  (2026-08-10 spine start and `completed_due_date` fix; 2026-08-20 UTC→local stamps and the
+  recurrence migration). Timezone handling is the one in §6 that produces them.
+- [`habits-contract.md`](../../sheets/todoist/habits-contract.md) — the `habits` /
+  `sub-habits` label taxonomy, applied at capture time rather than derived in code.
 
-### Overdue and RecurringStatus
-
-| Case | Behaviour | Why it matters |
-| --- | --- | --- |
-| Date cells read back from Sheets | Returned as `Date` objects once the column is date-formatted, so a raw `===` against `"YYYY-MM-DD"` never matches. | Without the `dateKey()` normaliser the daily replace silently appends on top of the old snapshot instead of replacing it — duplicates, not an error. |
-| Sub-habits | Undated by design, so they never reach either tab. | One appearing there means it was given a due date. That is the bug, not the tab. |
-| Two completions between runs | RecurringStatus cannot see them — it records state, not events. | Use `Completions` for counting; use this tab to reconstruct state on days the event source came back empty. |
-| "Today" stamp before 2026-08-20 | `snapshot_date` (both tabs), `days_overdue`, and `KarmaStats.date` were derived via `toDateString()` — UTC. The 23:30 local trigger is already 05:30 *tomorrow* in UTC, so every nightly row was labeled one day ahead, and `days_overdue` ran one too high. | Fixed to `localDateString()`. Historical rows are not garbage: a snapshot labeled D taken at 23:30 of D−1 is simply the state at the *start* of day D, and every consumer's date comparison tolerates that. The dangling last label self-heals — the replace-today pass overwrites it on the first post-fix nightly run. |
-
-### HabitDaily
-
-| Case | Behaviour | Why it matters |
-| --- | --- | --- |
-| Due-ness is contract-based | Every weekday a habit has a spine row is a day it was owed; `due` is 1 for anything except `not_due`. The snapshot `due_date` is never consulted for status (kept in col K as drift info). | The snapshot cannot be trusted for scheduling: completing a habit pushes its due date past the day, and rescheduling does the same — both would read "not scheduled". A weekend check-off still counts as done with `due = 1`. |
-| One status rule, two writers | `habitDayStatus(date, wasCompleted, today)` decides column G for both `rebuildHabitDaily()` and `synthesizeHabitDailyHistory()`: `done` / `pending` / `missed` / `not_due`. | The synthesizer used to duplicate the derivation, so any change to the rule had to be made twice — exactly the kind of drift that produces two different definitions of "missed" in one tab. |
-| Today is `pending`, not `missed` | A day still in progress reads `pending` (`due = 1`, `completed = 0`). The nightly rebuild's 7-day window re-scores it the next night, so it settles into `done`/`missed` on its own. | The 23:30 snapshot writes today's spine rows, and a manual backfill at noon writes them mid-day: scoring them `missed` sentences habits that still have hours left. Transient by design — no row stays `pending` past its own day. |
-| Attribution | A completion counts on the **local day it was checked off**, from `completed_at` in the script timezone. | Deliberate: it answers "on which days did I actually do this". The tradeoff is that catching up Monday's habit on Wednesday marks Wednesday, not Monday. |
-| Weekend rest days | Saturday/Sunday uncompleted reads `not_due` across **all** history; a weekend check-off still reads `done` with `due = 1` (`isRestDay()`). | Deliberate reinterpretation, not a bug: the habits ran `every day` until 2026-08-20, but the owner's contract never included weekends — charts must not penalize them. |
-| 2026-08-20 recurrence migration | Every habit switched `every day` → `every workday`; the two Daily Reminders tasks gained recurrence and enter the grid only from that date. | Pre-migration spine rows keep the old `every day` strings; the weekend rule overrides them by design. Any future *synthesized* pre-Aug-10 spine must apply the same rest-day rule rather than trusting those historical strings. |
-| Rescheduling cannot hide a miss | The reschedule trigger fires ~20:09 nightly — before the 23:30 snapshot — bumping every skipped habit to tomorrow. Under snapshot-based due-ness this laundered every miss into `not_due` (observed live: Aug 20 – Sep 3 2026 weekdays read 0 across the board). | Contract-based due-ness (row above) eliminated the blind spot: a bumped-but-uncompleted weekday reads `missed`. Regression-tested with a bumped fixture row. |
-| Habits completed between 23:30 and midnight | Land in the following day's data. | The 7-day rebuild window exists precisely so the next run corrects them. A one-day window would lose them. |
-| Streaks are seeded, not restarted | `readStreakSeeds()` reads, per habit, the streak on its last row *below* the replace boundary; the rebuild threads forward from there. | A rebuild only writes a trailing window. Threading from 0 inside it would reset every streak to at most the window's length on each nightly run — a seven-day ceiling on a hundred-day streak. |
-| Synthesizer re-threads the observed block | `synthesizeHabitDailyHistory()` finishes by calling `rebuildHabitDaily(HABIT_DAILY_BACKFILL_DAYS)`. | The observed rows were threaded before any history existed, so they started at 0 on the spine's first day. The rebuild re-seeds them from the synthetic block; its clamp keeps the synthetic rows themselves untouched. |
-| A layout change drops synthetic history | The header guard clears the tab, and the auto-widen rebuilds only what the spine can regenerate — which is nothing before 2026-08-10. | Re-run `synthesizeHabitDailyHistory()` once after any column change. Documented in the schema next to the column list, because the loss is silent otherwise. |
-| Intraday re-runs | Every step is idempotent for the same day: Completions appends from a stored cursor, Overdue and RecurringStatus replace today's rows, KarmaStats upserts by date, HabitDaily rebuilds its window. | This is what makes an hourly trigger safe. `syncRecurringStatus`'s per-row `deleteRow` loop now runs ~17×/day; it is the frozen-header-sensitive path, but it only throws when today's rows are the *only* data rows — i.e. never after the first day. |
-| Spine row labeled after today | Rendered, but always as `not_due` with `due = 0`. | A snapshot cannot observe a day that has not happened — a future label is always a stamping artifact (seen live on 2026-08-20). What mattered was never showing tomorrow's habits as pre-emptively `missed`; the status rule guarantees that, so the row itself is harmless and stays visible. |
-| Ordering | Must run after both `Completions` and `RecurringStatus`. | Running earlier rebuilds today's grid from a spine that has no rows for today. |
-| Missing `Completions` tab | Every habit day reads as missed. Logged, no crash. | Degrades loudly rather than silently. |
-| Missing `RecurringStatus` tab | No-op with a log line, no tab created. | The spine is checked *before* the tab is created — bailing after `getOrCreateHabitDailySheet()` would leave an empty `HabitDaily` behind that nothing ever fills. |
-| Habit naming | Column C stores the title up to the first `" - "`; the untrimmed title is kept in `habit_full`. | Half the habits carry a motivational tagline and half do not, so raw titles make Looker row labels a mix of phrases and sentences. Deriving the short name here avoids renaming tasks and avoids fighting the Habit Tracker app over titles. |
-| Layout change | An outdated header causes the whole tab to be cleared, not overwritten. | Existing rows are positional; writing new columns over stale rows would leave silently misaligned data. The grid is derived, so a backfill rebuilds it. |
-| Empty tab | The rebuild window auto-widens to `HABIT_DAILY_BACKFILL_DAYS` (400), whatever window was asked for. | Without it, the first nightly run after a layout change would clear the tab and refill only 7 days — history truncated to a week until someone noticed. It also makes a fresh deploy backfill itself. |
-| Label matching | Exact token, never substring. | `sub-habits` contains `habits` as a substring, so a naive "contains" test sweeps every checklist step back into the habit count. |
-| Window wipe | One contiguous `clearContent()` — not `deleteRows()`, and not row-by-row. | Per-row calls turn a 400-day backfill into a timeout, and `deleteRows()` throws "you can't delete all unfrozen rows" (seen live, in Spanish) the moment the header row is frozen — which a full-window rebuild triggers every time, since all data rows are stale at once. Clearing leaves the grid rows in place; the rewrite lands on top. |
-| Coexistence with the nightly sync | Rebuilds key done-ness on `completed_at` (Completions col A) and due-ness on the spine snapshot — never on Completions col J (`due_date`). | Col J carries split semantics (pre/post the Aug-10 `completed_due_date` fix), so reading it would resurrect the bug on every rebuild. The spine's due dates come from `/tasks/filter` snapshots, a pipeline that bug never touched. Completions is the durable completion store — the activity API refill caps at ~90 days, so clearing that tab permanently loses older done-ness. |
-| Synthetic history floor | A habit's synthetic window starts at max(`added_at`, first captured completion); zero captures ⇒ skipped entirely. | Recurring capture only began at some point — synthesising earlier days would paint every uncaptured day `missed` (streak poison). Deliberate undercount: misses can be lost, never fabricated. Also keeps out tasks that carry `habits` today but were plain reminders then. |
-| Synthetic rows vs rebuilds | `rebuildHabitDaily` clamps its replace boundary to the earliest observed spine day. | Without the clamp, a 400-day backfill would delete the synthetic block while regenerating nothing in its place — the spine has no rows there. The blank `due_date` marks synthetic rows; their section/labels/priority are the habit's current values, not historical ones. |
-| Retracted completions | Completions is append-only, so a habit checked off and later unchecked stays `done` for that day. | Rebuilds cannot converge past this — the source itself never forgets. Known and accepted. |
-
+---
 ### Reschedule habits
 
 | Case | Behaviour | Why it matters |

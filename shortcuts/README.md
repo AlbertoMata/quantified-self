@@ -19,7 +19,7 @@ Full walkthrough for the Apple Shortcuts → Google Sheets pipeline.
 |---|---|---|
 | [log-mood.md](log-mood.md) | "Log mood" | Rate mood 1–5 |
 | [log-event.md](log-event.md) | "Mark [event]" | Core logger + per-event wrappers ("Mark Coffee" fires in one shot) |
-| [log-focus-block.md](log-focus-block.md) | "Start focus" / "End focus" | Time focus blocks |
+| [health-sync.md](health-sync.md) | _(runs nightly, automated)_ | Reads Apple Health → POSTs a daily row (free replacement for Health Auto Export) |
 
 ---
 

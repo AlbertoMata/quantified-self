@@ -82,7 +82,15 @@ quantified-self/
 │   ├── health-webhook.gs        # Webhook for Health Sync shortcut → Health sheet
 │   ├── everhour-sync.gs         # Nightly Everhour pull (same GAS project)
 │   └── todoist/
-│       ├── schema-todoist.md              # quantified-self-todoist schema (5 tabs)
+│       ├── README.md                      # Index: 5 tabs, script map, Script Properties
+│       ├── schema/                        # One doc per sheet tab
+│       │   ├── completions.md
+│       │   ├── overdue.md
+│       │   ├── karma-stats.md
+│       │   ├── recurring-status.md
+│       │   └── habit-daily.md
+│       ├── habits-contract.md             # habits/sub-habits labels, adding a step
+│       ├── history.md                     # Dated caveats for reading old rows
 │       ├── todoist-sync.gs                # Orchestrator: nightly pull + Overdue/Karma/RecurringStatus
 │       ├── todoist-sync-completions.gs    # Completions tab (one-off + recurring + In Review)
 │       ├── todoist-sync-sections.gs       # "In Review" snapshot source
@@ -91,6 +99,7 @@ quantified-self/
 │       └── todoist-reschedule-habits.gs   # Manual: bump skipped habits (writes back)
 ├── analytics/
 │   ├── README.md                # Looker Studio 4-source blend setup
+│   ├── todoist-blends.md        # Blend recipes on the Todoist tabs
 │   └── habits-page.md           # Habits page build recipe (HabitDaily-driven)
 ├── obsidian/
 │   ├── README.md                # Custom Frames + daily note integration guide

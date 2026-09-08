@@ -22,7 +22,7 @@ over the week and month (what got done, streaks, rates). Some habits are optiona
 second cup of coffee — and must be filterable out of the numbers.
 
 `HabitDaily` already scores every habit-day as `done` / `pending` / `missed` / `not_due`
-(see [`../../sheets/todoist/schema-todoist.md`](../../sheets/todoist/schema-todoist.md)),
+(see [`../../sheets/todoist/schema/habit-daily.md`](../../sheets/todoist/schema/habit-daily.md)),
 which is what makes a real tracker possible. Two data gaps still block it: there is no
 `streak` column (Looker Studio cannot compute a running count), and no time-of-day to
 order today's list by — the recurrence string carries it (`every workday at 09:10 am`) but
@@ -75,7 +75,7 @@ Looker cannot sort on that.
 
 ### Docs to update alongside
 
-- `sheets/todoist/schema-todoist.md`: HabitDaily table → 16 columns (`due_time`, `streak`
+- `sheets/todoist/schema/habit-daily.md`: HabitDaily table → 16 columns (`due_time`, `streak`
   with the rule and the "pending carries" note); intraday schedule paragraph; "after a
   layout change, re-run `synthesizeHabitDailyHistory()`" note.
 - `docs/todoist/architecture.md`: schedule (hourly + nightly), `syncTodoistIntraday` in the
@@ -161,7 +161,7 @@ change is needed; synthetic rows carry the habit's *current* labels.
 ## Files
 
 - Modify: `sheets/todoist/todoist-habit-daily.gs`, `sheets/todoist/todoist-sync.gs`,
-  `sheets/todoist/schema-todoist.md`, `docs/todoist/architecture.md`, `analytics/README.md`,
+  `sheets/todoist/schema/habit-daily.md`, `docs/todoist/architecture.md`, `analytics/README.md`,
   `README.md`
 - Create: `analytics/habits-page.md`
 - Test harness (scratchpad, not in the repo): `hd-harness.js`
