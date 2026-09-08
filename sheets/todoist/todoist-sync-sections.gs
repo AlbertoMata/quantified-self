@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Todoist Sync — Section "In Review" Completions
-// Counts tasks sitting in an "In Review" section (Fullsteam / Ascensus / Work)
+// Counts tasks sitting in an "In Review" section (Ascensus / Work)
 // as completion events — i.e. PR reviewed / story ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,7 @@ function fetchSectionMovementCompletions(projectNames, sinceDate, until) {
 			return [];
 		}
 
-		// One filter query for all target projects: "#Fullsteam | #Ascensus | #Work".
+		// One filter query for all target projects: "#Ascensus | #Work".
 		const query = projectNames
 			.map((name) => `#${name}`)
 			.join(" | ");

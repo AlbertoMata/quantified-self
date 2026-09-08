@@ -799,12 +799,5 @@ function nextStreak(prev, status) {
 	return prev;
 }
 
-// completed_at as a YYYY-MM-DD in the SCRIPT's timezone. The stored value is UTC, so a
-// habit checked off at 20:00 in a UTC-6 zone is stored on the following UTC date —
-// formatting it as UTC would file every evening habit one day late.
-function localDayOf(cellValue) {
-	if (!cellValue) return "";
-	const d = cellValue instanceof Date ? cellValue : new Date(String(cellValue));
-	if (isNaN(d.getTime())) return "";
-	return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
-}
+// localDayOf() moved to todoist-sync-utils.gs — it is generic, and the Apps Script
+// global scope is flat, so every call site here is unchanged.

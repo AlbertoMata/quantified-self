@@ -34,7 +34,7 @@ Captures completions from three sources:
    here.
 2. **Recurring check-offs** — activity log (`/activities`, `event_type=completed`) filtered
    to `is_recurring`; these carry their labels in `extra_data`.
-3. **Tasks currently in an "In Review" section** of a target project (Fullsteam, Ascensus,
+3. **Tasks currently in an "In Review" section** of a target project (Ascensus,
    Work) — treated as PR/story ready state. See [In Review](#in-review) below.
 
 Sources 1 and 2 are **disjoint by construction** (a task is either recurring or not), so

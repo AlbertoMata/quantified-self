@@ -266,10 +266,18 @@ function localDateString(date) {
 	);
 }
 
-function addDays(date, days) {
-	const copy = new Date(date.getTime());
-	copy.setDate(copy.getDate() + days);
-	return copy;
+// A timestamp as a YYYY-MM-DD in the SCRIPT's timezone. Stored values are UTC, so an
+// event at 20:00 in a UTC-6 zone carries the FOLLOWING UTC date — formatting it as
+// UTC would file every evening event one day late.
+//
+// Lives in the shared layer rather than beside its caller because it is generic:
+// any tab deriving a local calendar day from a stored UTC timestamp wants exactly
+// this, and HabitDaily is simply the first to need it.
+function localDayOf(cellValue) {
+	if (!cellValue) return "";
+	const d = cellValue instanceof Date ? cellValue : new Date(String(cellValue));
+	if (isNaN(d.getTime())) return "";
+	return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
 }
 
 // Normalise a sheet cell value to a YYYY-MM-DD key for comparison.

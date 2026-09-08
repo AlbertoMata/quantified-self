@@ -170,8 +170,9 @@ re-runs safe.
 - **Caching** — project and section id→name maps in `CacheService` for 6 hours.
 - **Persistent state** — sync cursor and "In Review" membership in Script Properties,
   plus a manual cursor reset.
-- **Formatting and dedup** — date formatting in both UTC and script-local form, label and
-  duration parsing, complexity extraction, and the existing-key readers used for dedup.
+- **Formatting and dedup** — date formatting in both UTC and script-local form, local-day
+  derivation, label and duration parsing, complexity extraction, and the existing-key
+  readers used for dedup.
 
 Any port needs an equivalent of all five before a single feature module can be moved.
 

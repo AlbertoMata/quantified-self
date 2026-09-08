@@ -23,7 +23,7 @@
 const TODOIST_BASE = "https://api.todoist.com/api/v1";
 
 // ── Configuration ──────────────────────────────────────────────────────────
-const TARGET_PROJECTS = ["Fullsteam", "Ascensus", "Work"];
+const TARGET_PROJECTS = ["Ascensus", "Work"];
 const IN_REVIEW_SECTION_NAME = "In Review";
 const CACHE_DURATION_HOURS = 6;
 const MAX_COMPLETED_SPAN_MS = 90 * 86400000;

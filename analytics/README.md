@@ -22,8 +22,9 @@ Add these as separate data sources in Looker Studio (one per tab):
 
 **To add each**: Looker Studio → Add data → Google Sheets → select the sheet → select the tab → Add.
 
-The last two power the **Habits** page — a separate build, since it has its own calculated
-fields, layout, and filters. See [`habits-page.md`](habits-page.md) for the full recipe.
+`QS - HabitDaily` and `QS - RecurringStatus` power the **Habits** page — a separate build,
+since it has its own calculated fields, layout, and filters. See
+[`habits-page.md`](habits-page.md) for the full recipe.
 
 ---
 

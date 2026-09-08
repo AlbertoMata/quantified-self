@@ -63,7 +63,9 @@ quantified-self/
 ├── docs/
 │   ├── diagrams.md              # Mermaid architecture diagrams
 │   ├── plans/
-│   │   └── habits-dashboard.md  # Looker Habits page: design + required sheet changes
+│   │   ├── habits-dashboard.md  # Looker Habits page: design + required sheet changes
+│   │   ├── life-areas.md        # Areas + bill cycles: Todoist → Sheets → scripts → reports
+│   │   └── typescript-port.md   # Port off Apps Script: clasp + TS, then GH Actions
 │   └── todoist/
 │       └── architecture.md      # Todoist scripts: structure, functions, edge cases
 ├── shortcuts/
