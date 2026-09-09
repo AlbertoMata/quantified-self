@@ -1,0 +1,22 @@
+{
+	"name": "quantified-self-sheets-ts",
+	"version": "0.0.0",
+	"private": true,
+	"description": "TypeScript port of the Apps Script sync jobs. Platform-agnostic core, one adapter per runtime.",
+	"type": "module",
+	"engines": {
+		"node": ">=22.18"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "node --test \"src/**/*.test.ts\"",
+		"clasp": "clasp",
+		"clasp:login": "clasp login",
+		"clasp:whoami": "clasp show-authorized-user"
+	},
+	"devDependencies": {
+		"@google/clasp": "^3.4.1",
+		"@types/node": "^24.13.4",
+		"typescript": "^5.8.0"
+	}
+}

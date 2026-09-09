@@ -6,9 +6,15 @@
   "directories": {
     "doc": "docs"
   },
+  "workspaces": [
+    "sheets/ts"
+  ],
   "scripts": {
-    "format": "prettier --write --parser babel \"**/*.gs\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "format": "npm run format:gs && npm run format:ts",
+    "format:gs": "prettier --write --parser babel \"**/*.gs\"",
+    "format:ts": "prettier --write --no-error-on-unmatched-pattern \"sheets/ts/**/*.ts\"",
+    "typecheck": "npm --workspace sheets/ts run typecheck",
+    "test": "npm --workspace sheets/ts test"
   },
   "repository": {
     "type": "git",

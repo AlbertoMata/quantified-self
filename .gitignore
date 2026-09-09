@@ -6,4 +6,7 @@ shortcuts/generated/
 
 # Node
 node_modules/
-package-lock.json
+
+# package-lock.json IS committed as of the sheets/ts workspace: `npm ci` in
+# GitHub Actions requires it, and there are real dependencies now.
+# See docs/plans/typescript-port.md.

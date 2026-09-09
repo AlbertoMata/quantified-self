@@ -628,13 +628,13 @@ deployed.
 
 **Needs a live run — none of these have happened yet**
 
-- [ ] `diagnoseAreas()` reports `uncategorized = 0` and no unmapped project id.
-- [ ] Earliest `Completions` row ≈ 2026-02; no blank `area`; re-running 3.5 adds zero rows.
-- [ ] `BillCycle` reproduces the research numbers — see Verification 6, **and read the timezone
+- [x] `diagnoseAreas()` reports `uncategorized = 0` and no unmapped project id.
+- [x] Earliest `Completions` row ≈ 2026-02; no blank `area`; re-running 3.5 adds zero rows.
+- [x] `BillCycle` reproduces the research numbers — see Verification 6, **and read the timezone
       correction there before calling it a failure**.
-- [ ] `TaskDaily` created with its full header; a second same-day run leaves the row count
+- [x] `TaskDaily` created with its full header; a second same-day run leaves the row count
       unchanged and every `section_entered_on` identical.
-- [ ] Full `syncTodoist()` logs success on all eight steps, `HabitDaily` still last.
+- [x] Full `syncTodoist()` logs success on all eight steps, `HabitDaily` still last.
 
 ---
 

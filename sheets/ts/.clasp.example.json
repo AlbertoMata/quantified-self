@@ -1,0 +1,20 @@
+{
+	"_comment": [
+		"Template for the real, gitignored configs, one per Apps Script project:",
+		".clasp-sync.json (Todoist Sync), .clasp-everhour.json (Everhour Sync),",
+		".clasp-log.json and .clasp-health.json (the two bound webhooks).",
+		"Copy this file to each of those names and fill in scriptId.",
+		"Select one with clasp's -P flag, e.g. `clasp status -P .clasp-sync.json`.",
+		"",
+		"scriptId  the <ID> from https://script.google.com/.../projects/<ID>/edit",
+		"          (Apps Script editor -> Project Settings -> Script ID).",
+		"srcDir    the directory clasp pushes FROM, relative to this file. clasp v3",
+		"          refuses a srcDir that escapes the config's own directory, which is",
+		"          why pushes come from a staged dist/ rather than from sheets/*.gs",
+		"          in place. Each project needs its own appsscript.json inside it.",
+		"",
+		"These files are gitignored: a scriptId identifies a real project of yours."
+	],
+	"scriptId": "REPLACE_WITH_SCRIPT_ID",
+	"srcDir": "dist/sync"
+}

@@ -1,0 +1,10 @@
+# Build output — clasp pushes from here, but it is always regenerable
+dist/
+
+# clasp project configs carry scriptIds. Copy .clasp.example.json and fill it in.
+.clasp.json
+.clasp-*.json
+!.clasp.example.json
+
+# clasp's auth token, if it ever lands here rather than in ~/.clasprc.json
+.clasprc.json

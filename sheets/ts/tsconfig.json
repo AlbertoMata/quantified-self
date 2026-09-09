@@ -1,0 +1,32 @@
+{
+	"compilerOptions": {
+		// ES2019 on purpose: it is what the Apps Script V8 runtime guarantees.
+		// Constraining the type system to it stops us reaching for a built-in
+		// that typechecks locally and throws in the editor at 23:30.
+		"target": "ES2019",
+		"lib": ["ES2019"],
+
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		// Node 24 runs .ts directly, so imports carry a .ts extension and
+		// nothing is emitted from tsc — esbuild builds the bundle.
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+
+		// Type stripping can only erase types, never generate code: no enum,
+		// no namespace, no parameter properties. The flag makes that an error
+		// here rather than a surprise at runtime.
+		"erasableSyntaxOnly": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"exactOptionalPropertyTypes": true,
+		"forceConsistentCasingInFileNames": true,
+		"skipLibCheck": true
+	},
+	"include": ["src/**/*.ts"]
+}
