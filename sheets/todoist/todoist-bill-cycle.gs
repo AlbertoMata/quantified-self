@@ -16,13 +16,25 @@
 //   * The live task list supplies the ONE still-open cycle per bill, and the bill's
 //     current name.
 //
-// WHY NOT `completed_at`: the check-off date is not the payment date, in either
-// direction. On 2026-09-08 at 00:18:32 / :35 / :37 — three seconds apart — Telcel,
-// electricity and internet were all checked off, closing cycles 10, 12 and 24 days late;
-// the 2026-08-04 sweep closed several cycles EARLY. So `status` comes from Todoist's
-// `was_overdue` where it exists, and `days_late` is reported separately as "how long the
-// cycle stayed open". Where the two disagree, the check-off was retroactive — that
-// disagreement is information, not a bug.
+// WHAT THIS TAB CAN AND CANNOT KNOW — read this before trusting a number.
+//
+// Todoist records when you TICKED THE BOX. It has no idea when money moved. Every column
+// here is therefore a measure of *administrative* timeliness, not payment timeliness, and
+// the names say so: `closed` / `closed_late`, `days_to_close`, `on_time_close_streak`.
+// A bill paid on time and ticked three days later reads `closed_late`, correctly — the
+// CYCLE closed late even though the payment did not.
+//
+// An earlier design claimed `completed_at` was worthless and Todoist's `was_overdue` was
+// "the honest signal". That was wrong, and worth stating plainly so it is not re-derived:
+// **`was_overdue` IS `completed_at` vs the due date**, computed by Todoist. It is the same
+// measurement at better precision, not independent evidence. Nothing in the payload knows
+// about payments.
+//
+// One real consequence: a due TIME can make on-time closure impossible. `PAY THE MORTGAGE`
+// is due "every 2nd at 2:00 am", so it is overdue from 02:00 that day — every waking-hour
+// check-off is late by construction. Five of five cycles carry `wasOverdue: true` for that
+// reason, not because the mortgage was paid late. Fixing the due time is a Todoist-side
+// change; see schema/bill-cycle.md.
 //
 // DELIBERATELY EXCLUDED
 //   * `deadline_date` — a fossil. Todoist never advances a deadline when a task recurs,
@@ -51,11 +63,12 @@ const BILL_CYCLE_HEADER = [
 	"cycle", // E — YYYY-MM, from cycle_due_date
 	"cycle_due_date", // F — the occurrence this row is about
 	"closed_at", // G — local day it was checked off; blank while open
-	"days_late", // H — negative = early; measured against today while open
-	"status", // I — paid | late | open | overdue
-	"was_overdue", // J — Todoist's own verdict; blank = unknown
+	"days_to_close", // H — due → close lag. Negative = closed early; measured
+	//     against today while still open
+	"status", // I — closed | closed_late | open | overdue
+	"was_overdue", // J — Todoist's own flag; blank = unknown
 	"is_recurring", // K
-	"on_time_streak", // L — consecutive cycles closed on time
+	"on_time_close_streak", // L — consecutive cycles CLOSED by their due date
 ];
 
 function syncBillCycle() {
@@ -213,14 +226,14 @@ function buildBillCycleRows(ss, tree, liveTasks) {
 					c.was_overdue,
 					today,
 				);
-				// paid → done, late → missed, still-open → carry.
-				// An unfinished cycle is not yet a failure, exactly as a
-				// day in progress is not.
+				// closed → done, closed_late → missed, still-open →
+				// carry. An unfinished cycle is not yet a failure,
+				// exactly as a day in progress is not.
 				streak = nextStreak(
 					streak,
-					status === "paid"
+					status === "closed"
 						? "done"
-						: status === "late"
+						: status === "closed_late"
 							? "missed"
 							: "pending",
 				);
@@ -246,18 +259,25 @@ function buildBillCycleRows(ss, tree, liveTasks) {
 	return rows;
 }
 
-// Todoist's own verdict decides `late` vs `paid` where it exists, because given batch
-// check-offs it is the only honest signal. Dates are the fallback for one-off bills and
-// for rows written before was_overdue was captured.
+// `closed` vs `closed_late` — did the cycle close by its due date. NOT a claim about when
+// the bill was paid; see the file header.
 //
-// A blank was_overdue means UNKNOWN, never "on time" — so it falls through to the dates
-// rather than defaulting to `paid`.
+// Todoist's `was_overdue` wins where present because it is TIMESTAMP-precise, while the
+// date fallback is only DAY-precise. The two can legitimately disagree on a same-day close:
+// a task due 02:00 and ticked at 09:00 the same day is `was_overdue = TRUE` but zero days
+// late. Trusting the flag first keeps the answer consistent with what Todoist itself shows.
+//
+// A blank `was_overdue` means UNKNOWN — it falls through to the dates rather than
+// defaulting to `closed`, so an unverifiable row is never quietly scored as on time.
+//
+// `open` / `overdue` describe the LIVE state of an unticked cycle and are unchanged: they
+// make no claim about payment, only about whether the task is past its due date right now.
 function billCycleStatus(closedAt, cycleDueDate, wasOverdue, today) {
 	if (closedAt) {
-		if (wasOverdue === "TRUE") return "late";
-		if (wasOverdue === "FALSE") return "paid";
-		const late = daysBetweenDays(cycleDueDate, closedAt);
-		return late !== "" && late > 0 ? "late" : "paid";
+		if (wasOverdue === "TRUE") return "closed_late";
+		if (wasOverdue === "FALSE") return "closed";
+		const lag = daysBetweenDays(cycleDueDate, closedAt);
+		return lag !== "" && lag > 0 ? "closed_late" : "closed";
 	}
 	const over = daysBetweenDays(cycleDueDate, today);
 	return over !== "" && over > 0 ? "overdue" : "open";

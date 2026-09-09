@@ -145,8 +145,10 @@ projects wrongly holding tasks, and projects no rule can resolve.
 
 One row per bill per **cycle**, not per day. `status` comes from Todoist's own `was_overdue`
 where it exists, because batch check-offs make `completed_at` useless for on-time
-measurement; `days_late` is reported separately from the dates. Where they disagree, the
-check-off was retroactive. `checkBillRisk()` is the separate morning read-only trigger.
+measurement; `days_to_close` is reported separately from the dates. Statuses are `closed` /
+`closed_late`, deliberately **not** paid/late: Todoist records when the box was ticked, never
+when money moved, and `was_overdue` is that same comparison at timestamp precision rather than
+independent evidence. `checkBillRisk()` is the separate morning read-only trigger.
 
 ### `todoist-area-daily.gs` — the `AreaDaily` rollup
 

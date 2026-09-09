@@ -40,9 +40,12 @@ honesty flag that **must** be filtered on before charting:
 | `QS - TaskDaily` | `section_age_seeded = FALSE` before averaging `days_in_section` | A seeded value is a lower bound, not a measurement — on the first run it is every row |
 | `QS - TaskDaily` | `is_exit = FALSE` for "what is open now" | Exit rows are terminal records of departed tasks |
 
-`QS - BillCycle` needs no such filter, but note that `was_overdue` **blank means unknown, not
-on-time**, and `deadline_date` is excluded from every urgency calculation because Todoist
-never advances a deadline when a task recurs.
+`QS - BillCycle` needs no such filter, but two things must be said on any chart built from it.
+**It measures closure, not payment** — Todoist knows when you ticked the box, never when money
+moved, which is why the statuses read `closed` / `closed_late` rather than paid/late. Title
+those charts accordingly ("cycles closed late", not "bills paid late"). And `was_overdue`
+**blank means unknown, not on-time**, while `deadline_date` is excluded from every urgency
+calculation because Todoist never advances a deadline when a task recurs.
 
 ---
 

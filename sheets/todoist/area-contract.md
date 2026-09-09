@@ -111,16 +111,29 @@ A task whose area is `bills-taxes`. No extra label — the area label already ma
 One-off obligations must not fall through: `Pay predial` is non-recurring and was 31 days
 overdue on 2026-09-08. A recurring-only rule would have hidden it.
 
-### Scoring a bill: use `was_overdue`, never `completed_at`
+### Scoring a bill measures CLOSURE, not payment
 
-The check-off date is **not** the payment date, in either direction. On 2026-09-08 at
-00:18:32 / :35 / :37 — three seconds apart — Telcel, electricity and internet were all
-checked off, closing cycles 10, 12 and 24 days late. The 2026-08-04 sweep closed several
-cycles *early*. Batch check-offs make `completed_at` worthless for on-time measurement.
+Todoist records when you **ticked the box**. It has no idea when money moved, and no field in
+the payload changes that. So `BillCycle` reports `closed` / `closed_late`, `days_to_close` and
+`on_time_close_streak` — administrative timeliness, deliberately named so nothing reads as a
+claim about payment.
 
-Todoist's own `was_overdue` (with `completed_due_date` naming the cycle) is the honest
-signal, and it is already in the activity payload. It measures **did the cycle close late**,
-not **did money move late** — a real limitation, stated here so no chart claims otherwise.
+**`was_overdue` is not a second source.** An earlier version of this contract said
+`completed_at` was worthless and Todoist's `was_overdue` was "the honest signal". That is
+wrong: `was_overdue` *is* `completed_at` compared against the due date, computed by Todoist at
+timestamp precision. Same measurement, better resolution. It is preferred where present for
+exactly that reason — it resolves same-day closes the day-level comparison cannot — but it
+cannot rescue the tab from what Todoist fundamentally does not know.
+
+The batch-sweep evidence still stands and still matters: on 2026-09-08 at 00:18:32 / :35 / :37
+— three seconds apart — Telcel, electricity and internet were all ticked, closing cycles that
+had been open for days; the 2026-08-04 sweep closed several *early*. That is why the tab does
+not present closure as payment.
+
+**Watch the due time.** `PAY THE MORTGAGE` is due `every 2nd at 2:00 am`, so it is overdue from
+02:00 that day and every waking-hour check-off is late by construction. All five of its cycles
+read `closed_late`. If a bill looks chronically late, check its due *time* before concluding
+anything about behaviour.
 
 ### `deadline` is a fossil — never use it for urgency
 

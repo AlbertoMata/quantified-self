@@ -85,8 +85,11 @@ The practical consequence: historical rows resolve through the project tree and 
 are correct; they are not the same claim. A chart that mixes declared and derived rows
 without saying so is asserting more confidence than the data has.
 
-`was_overdue` measures **did the cycle close late**, not **did money move late** — see
-[`../area-contract.md`](../area-contract.md#scoring-a-bill-use-was_overdue-never-completed_at).
+`was_overdue` measures **did the cycle close late**, not **did money move late**, and it is
+not independent of `completed_at` — Todoist derives it by comparing the completion moment
+against the due date. It is preferred over a date comparison only because it is
+timestamp-precise rather than day-precise. See
+[`../area-contract.md`](../area-contract.md#scoring-a-bill-measures-closure-not-payment).
 
 > **Historical caveat**: col J carries split semantics either side of the 2026-08-10
 > `completed_due_date` fix — see [history.md](../history.md#2026-08-10--completed_due_date-fix-in-completions).

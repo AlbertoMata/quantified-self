@@ -85,10 +85,11 @@ All verified live against the account on 2026-09-08.
 | --- | --- |
 | **12 of 19 completion events since March carry `wasOverdue: true`.** Electricity's April cycle closed **33 days** late, internet's May cycle 21, the Invex card 23 | Bills are the worst-served, highest-stress area — hence report 4a first |
 | Telcel, electricity and internet were checked off at **00:18:32 / :35 / :37 on 2026-09-08** — a catch-up sweep, 10 / 12 / 24 days after their cycles | **`completed_at` is worthless for on-time measurement**, and errs both ways: the 2026-08-04 sweep closed several cycles *early* |
-| The activity payload already carries **`wasOverdue`** and **`completedDueDate`** | The honest signal exists and is discarded today |
+| The activity payload already carries **`wasOverdue`** and **`completedDueDate`** | Worth capturing — but it is `completed_at` vs due date computed by Todoist, **not independent evidence**. Better precision, same measurement |
 | Every recurring bill is **`p1`** | Priority carries no ranking signal inside bills. Days-until-due is the only ordering |
 | **`deadline` is a fossil** — Telcel's reads `2026-07-01` while its due date is `2026-09-29`; Todoist never advances a deadline on recurrence | Exclude `deadline_date` from bill urgency entirely |
 | `Pay predial` is non-recurring, due `2026-08-08` — **31 days overdue** | One-off obligations must reach the bills report too |
+| **`PAY THE MORTGAGE` is due `every 2nd at 2:00 am`** — all five cycles carry `wasOverdue: true`, at 1 / 1 / 2 / 5 / 28 days | A small-hours due time makes on-time closure impossible: the task is overdue from 02:00 that day, so every waking-hour check-off is late by construction. **Audit due times before reading chronic lateness as behaviour.** Found 2026-09-08 from the first live `BillCycle` output |
 | Only **9 open tasks** across all six bills projects | The area is small and stable — cheap to build, verifiable by eye |
 
 ### Backfill — what is and is not recoverable
@@ -125,7 +126,7 @@ history only ever accrues forward from the day a snapshot tab starts running.
 | Existing projects | **Never renamed**, only moved | Nesting preserves `project_id`, so all history survives. A *rename* would fork `project_name` mid-history and create a seam for no benefit |
 | **What is a bill** | A task whose area is `bills-taxes`. Recurring → one row per cycle; one-off → a single cycle row | The area label already marks it; no extra label needed |
 | **Bill grain** | **Cycle**, not day | `HabitDaily`'s daily rule would score a monthly bill `missed` 30 days out of 31 |
-| **On-time rule** | Todoist's **`wasOverdue` + `completedDueDate`** | The only honest signal given batch check-offs. Measures *did the cycle close late*, not *did money move late* |
+| **On-time rule** | **Closure, not payment.** `closed` / `closed_late` from `wasOverdue`, falling back to dates | Revised 2026-09-08 after the first live run. Todoist only knows when the box was ticked, so the columns are named for closure and make no payment claim. `wasOverdue` is **not** a second source — it *is* `completed_at` vs the due date, computed by Todoist at timestamp precision |
 | Amounts | **Not tracked** | No bill carries one today. A later, separate decision |
 | Work | Own report, on the shared `TaskDaily` tab | Work is the spine and deserves its own page. A *separate tab* proved wrong: errands need the same card-level aging, so one area-aware tab serves both |
 
@@ -558,9 +559,16 @@ of an already-present completion is dropped, not rewritten.
 
 **3.7** — `BillCycle` is `HabitDaily`'s twin: spine plus truth, scored on a **cycle** rather
 than a day. Columns: `bill`, `task_id`, `area`, `project_name`, `cycle` (`YYYY-MM`),
-`cycle_due_date`, `closed_at`, `days_late` (negative = early), `status`
-(`paid`/`late`/`open`/`overdue`), `was_overdue`, `is_recurring`, `on_time_streak`. Dedup key
-`task_id|cycle_due_date`. Reuses `nextStreak()` (`todoist-habit-daily.gs:796`).
+`cycle_due_date`, `closed_at`, `days_to_close` (negative = closed early), `status`
+(`closed`/`closed_late`/`open`/`overdue`), `was_overdue`, `is_recurring`,
+`on_time_close_streak`. Dedup key `task_id|cycle_due_date`. Reuses `nextStreak()`
+(`todoist-habit-daily.gs:796`).
+
+> **Renamed 2026-09-08, after the first live run.** The columns originally read `days_late`,
+> `paid`/`late` and `on_time_streak` — all of which assert something about *payment* that
+> Todoist cannot support. The tab measures when a task was **ticked**. Renaming was chosen
+> over adding a grace window: a threshold would have hidden real slippage behind a number
+> nobody could justify, whereas the rename makes every existing row readable as-is.
 
 > **Documented gap, not solved**: a cycle that was never closed leaves no completion event, so
 > skipped cycles stay invisible unless reconstructed by walking the recurrence. Recorded in the
@@ -690,8 +698,8 @@ already complete back to February, and the current state is bad enough to act on
 | --- | --- |
 | **Due next** | What is coming, ordered by days-until-due — **never by priority**, since every bill is p1 |
 | **Overdue now** | What has already slipped, with days overdue. `Pay predial` should appear at 31+ days |
-| **On-time rate** | Per bill and overall, from `was_overdue` — the honest cycle-closed-late measure |
-| **Days-late distribution** | Which bills are chronically late, and by how much. Electricity and internet will stand out |
+| **On-time close rate** | Per bill and overall. Title it **"cycles closed on time"**, never "bills paid on time" — the tab cannot support the second claim |
+| **Close-lag distribution** | Which bills sit longest before being ticked, and by how much. Electricity and internet stand out. Check each bill's due *time* before reading this as behaviour |
 | **Cycle history** | Bill × month heatmap of `status`, so a run of late months is visible at a glance |
 
 Excluded on purpose: `deadline_date` (the fossil) and `priority` (no signal).
@@ -768,15 +776,17 @@ they match the `*_HEADER` constants — so every column added here must land in 
    unformatted — that is deliberate, not an oversight. `npm test` is a stub that always exits 1.
 2. Scratchpad harness per the `hd-harness.js` / `bd-harness.js` precedent: `areaOf()` across all
    four resolution paths; **a bare `work` label must not satisfy `area-work`**; multi-label
-   resolution order; bill-cycle derivation (`cycle_due_date` → `cycle`, `days_late` sign);
-   `on_time_streak` resetting on a late cycle.
+   resolution order; bill-cycle derivation (`cycle_due_date` → `cycle`, `days_to_close` sign);
+   `on_time_close_streak` resetting on a late close; and a regression built from the five real
+   `PAY THE MORTGAGE` cycles, which must all read `closed_late` and must never read `paid`.
 3. **After Phase 1**: the filter `#Ascensus | #Work` returns what it did before the reorg (the
    In Review pipeline still queries by name); exactly one project is named `Habits`; and once
    3.1 ships, `diagnoseAreas()` reports `uncategorized = 0`, zero unlabelled `Week` cards, and
    no project whose parent it cannot resolve.
 4. **After Phase 2**: `Completions` row 1 reads `area`, `area_source`, `was_overdue` in O–Q.
 5. **After 3.5**: earliest `Completions` row ≈ 2026-02; a re-run adds zero rows.
-6. **After 3.7 — check against the research numbers, corrected for timezone.** The research
+6. **After 3.7 — check against the research numbers, corrected for timezone.** Note the
+   status vocabulary is `closed` / `closed_late`, not `paid` / `late`. The research
    figures (12 / 24 / 10 days late) were measured against the **UTC** date 2026-09-08. Those
    three bills were checked off at 00:18 UTC, which is **18:18 on 2026-09-07 in the script's
    timezone** — so counted on the local day, which is what `BillCycle` uses and what every
@@ -807,6 +817,8 @@ Things that are true, deliberate, and easy to mistake for bugs later.
 | **`Ascensus` is empty** | Not a bug | 0 tasks by filter and by `project_id`, predating the reorg. Expect `Work` rows only from that filter |
 | **`area-habits` is applied to nothing** | Correct state | `Habits` resolves by project override. The label stays as the escape hatch for a habit-area task living outside `Habits` |
 | **Two `.gs` files are not prettier-clean** | Deliberate | `todoist-habit-daily.gs`, `todoist-reschedule-habits.gs`. Formatting them would churn ~150 untouched lines into an unrelated diff |
+| **Due *times* distort lateness** | Open — Todoist-side | `PAY THE MORTGAGE` is due at 02:00, so every waking-hour check-off is `closed_late`. Not fixed in code; auditing the other bills' due times is a worthwhile follow-up |
+| **The tab cannot measure payment timeliness** | Structural | Todoist records the tick, not the payment. Making it true would mean ticking a bill at the moment you pay it — a behaviour change, not a code change |
 | **`sheets/README.md` links to two deleted files** | Pre-existing | `schema.md` and `apps-script.gs`, removed in commit `4ab0446`. Unrelated to this plan; noted so it is not mistaken for collateral damage |
 
 ## Rejected
