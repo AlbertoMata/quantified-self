@@ -9,6 +9,47 @@ right rule.
 
 ---
 
+## 2026-09-08 — life areas arrive
+
+Three parent projects (`💼 Work`, `💰 Bills & Taxes`, `📋 Errands`) were created and the 16
+existing projects nested under them. **No project was renamed**, so every `project_id` — and
+therefore every historical row's `project_name` — is unchanged. Four `area-*` labels were
+created and applied to all 135 open tasks outside `Habits`.
+
+`Completions` gained columns **O `area`, P `area_source`, Q `was_overdue`**.
+
+**Affects**: `Completions` cols O–Q.
+
+**How to read old rows**: `area` is fully retroactive — it re-derives from `project_id`, which
+every row has carried since the tab was created. `labels` (col G) is **not**: it is frozen at
+capture, so a row from March cannot know about a label added in September. Consequently
+historical rows resolve through the project tree and read `area_source = parent`, while rows
+written from today on mostly read `label`. Both are correct; they are not the same claim.
+**Filter on `area_source` before treating an area as declared.**
+
+Rows written before this date have blank O–Q until `backfillCompletionAreas()` is run.
+
+---
+
+## 2026-09-08 — `BillCycle`, `AreaDaily` and `TaskDaily` begin
+
+Three new tabs. Two of them have a floor that no backfill can lift:
+
+- `TaskDaily` is **observed only**. Todoist keeps no history of what was open on a past day,
+  and `item:updated` events carry no `section_id`, so both task presence and section age
+  start accruing on this date. Its `section_age_seeded` column marks rows whose section age
+  is a floor rather than a measurement — on the first run that is *every* row.
+- `AreaDaily`'s `open` / `overdue` / `in_week` / `p1_open` columns are snapshots and start
+  here too. Its `completed` column derives from `Completions` and reaches back normally;
+  `counts_observed` distinguishes them. Backfilled rows leave the snapshot columns **blank,
+  not zero** — a zero would claim nothing was open that day.
+
+`BillCycle` is fully derived and reaches as far back as `Completions` does — but see the
+repair note below, without which every cycle before 2026-08-10 is attributed to the wrong
+month.
+
+---
+
 ## 2026-08-10 — the spine begins
 
 `syncRecurringStatus()` ran for the first time. Before this date there is **no snapshot of
@@ -31,6 +72,17 @@ future. Rows after it carry the occurrence actually completed.
 **How to read old rows**: do not use `Completions.due_date` for habit-day attribution at
 all. `HabitDaily` deliberately keys done-ness on the local day of `completed_at` (col A),
 which never had this bug, and a rebuild would resurrect it if it read col J.
+
+**This one is now repairable.** `repairCompletionDueDates()` re-reads the activity log for
+the affected window and corrects col J in place. A plain backfill cannot: dedup is
+`task_id|completed_at`, so re-fetching an already-present completion drops it rather than
+rewriting it.
+
+It matters far more for bills than for habits. A day's error on a daily habit is a rounding
+issue; on a **monthly bill it is a whole cycle**, so `BillCycle` attributes every pre-fix
+cycle to the following month until the repair has run. Rows the activity log can no longer
+reach (Todoist retains roughly 12 months) keep their old value and are reported as unmatched
+rather than blanked.
 
 ---
 

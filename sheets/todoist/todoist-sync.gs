@@ -15,6 +15,11 @@
 //   syncTodoist()         daily at 23:30 — the run that finalises the day
 //   syncTodoistIntraday()  hourly — refreshes today's rows while the day is still running
 //                          (self-limited to 07:00–23:00; see below)
+//   checkBillRisk()       daily, MORNING (~08:00) — read-only; logs anything overdue or
+//                          due within 5 days. Deliberately NOT part of syncTodoist(): a
+//                          23:30 warning about a bill due that day is useless, and this
+//                          is the trigger that would actually have caught the 24-day-late
+//                          internet bill.
 // AFTER SETUP: run testTodoist() once from the editor — it probes each endpoint
 // and logs the response shape, so you can confirm the v1 paths work with your
 // account before trusting the nightly run.
@@ -54,7 +59,11 @@ const INTRADAY_END_HOUR = 23;
 // its whole window from the other two tabs.
 function syncTodoistIntraday() {
 	const hour = Number(
-		Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "H"),
+		Utilities.formatDate(
+			new Date(),
+			Session.getScriptTimeZone(),
+			"H",
+		),
 	);
 	if (hour < INTRADAY_START_HOUR || hour >= INTRADAY_END_HOUR) {
 		Logger.log(
@@ -81,6 +90,12 @@ function syncTodoist() {
 		["Overdue", syncOverdue],
 		["KarmaStats", syncKarmaStats],
 		["RecurringStatus", syncRecurringStatus],
+		// These three come after Completions because they read it. BillCycle and
+		// AreaDaily derive from it directly; TaskDaily only needs the live task
+		// list, but it sits here so the whole area group runs together.
+		["BillCycle", syncBillCycle],
+		["AreaDaily", syncAreaDaily],
+		["TaskDaily", syncTaskDaily],
 		// Last on purpose: it rebuilds its grid FROM the Completions and RecurringStatus
 		// tabs, so both must already hold today's rows when it runs.
 		["HabitDaily", syncHabitDaily],

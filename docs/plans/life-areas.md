@@ -1,32 +1,50 @@
 # Life areas and bill cycles — design
 
-**Status** (2026-09-08): **nothing implemented.** No label, sheet column, `.gs` file or Looker
-page from this plan exists yet.
+**Status** (2026-09-08): **Phases 1–3 complete. Nothing is deployed.**
+
+Todoist is categorized (three parent projects, 16 nested children, four `area-*` labels, 135
+tagged tasks) and all eleven Phase 3 steps are written and tested — four new `.gs` files, three
+new tabs, three schema docs, 114 harness assertions passing. **None of it has been pasted into
+Apps Script yet**, so no sheet column or tab exists in the live spreadsheet, and no Looker page
+has been built. See [Deploying](#deploying) for the order, which matters: two steps rewrite
+data.
 
 The work is organised into **four phases by where you do it** — Todoist, then Google Sheets,
 then the repo, then Looker Studio. Each phase is one tool and one sitting; you never have to
-ping-pong between them. Phase 3 is mine; Phases 1, 2 and 4 are yours, and this document is
-written to be followed click-by-click.
+ping-pong between them. Phase 3 is mine; Phases 2 and 4 are yours. Phase 1 was written to be
+followed click-by-click but ended up executed through the Todoist API instead — the record of
+what was done is kept below either way, because it is what the area map encodes.
 
-**Phases 1 → 2 → 3 must run in that order.** Tagging feeds the area map, and the spreadsheet
-columns must exist before any script writes to them — `Completions` has no header-writing code
-and no layout guard, so a widened row array written against a stale header lands silently
-misaligned. Phase 4 sub-phases can be built in any order once Phase 3 lands.
+**Phases 1 → 2 → 3 must run in that order** — with one correction made while implementing 3.3.
+Tagging still feeds the area map, so 1 precedes 3. But the stated danger in Phase 2 was wrong:
+a widened row array does **not** land misaligned. `syncCompletions()` writes with
+`getRange(lastRow + 1, 1, n, rows[0].length).setValues(rows)` — it starts at column 1 and takes
+its width from the array, so the three new values land in O–Q correctly whether or not headers
+exist. The real consequence of skipping Phase 2 was narrower: the columns would sit under blank
+headers and no by-name reader would find them. Step 3.3 now names them itself
+(`ensureCompletionsAreaColumns()`), which makes **2.1 a no-op safety net rather than a
+prerequisite** — though 2.0, the backup, is not optional, because 3.6 rewrites cells in place.
+Phase 4 sub-phases can be built in any order once Phase 3 is deployed.
 
 ## Phase status
 
 | Phase | What | Who / where | State |
 | --- | --- | --- | --- |
-| **1** | Categorize tasks with area labels | You — Todoist | not started |
-| **2** | Prepare the spreadsheet tabs | You — Google Sheets | not started |
-| **3** | Implement the scripts | Me — this repo | not started |
-| **4a** | Bills report | You — Looker Studio | not started |
-| **4b** | Errands report | You — Looker Studio | not started |
-| **4c** | Work report | You — Looker Studio | not started |
-| **4d** | Areas overview | You — Looker Studio | not started |
+| **1** | Categorize tasks with area labels | Done via the Todoist API | **done 2026-09-08** |
+| **2** | Prepare the spreadsheet tabs | You — Google Sheets | **mostly superseded by 3.3.** 2.1 is now automatic; **2.0, the backup, is still required** before deploying |
+| **3** | Implement the scripts | Me — this repo | **written and tested 2026-09-08. Not deployed** — see [Deploying](#deploying) |
+| **4a** | Bills report | Recipe: me · Build: you | not started — **build this one first** |
+| **4b** | Errands report | Recipe: me · Build: you | not started |
+| **4c** | Work report | Recipe: me · Build: you | not started |
+| **4d** | Areas overview | Recipe: me · Build: you | not started |
 
-Update this table as phases complete, with the date. Once Phase 3.1 has shipped, run
-`diagnoseAreas()` from the Apps Script editor and **believe its output over this document**.
+Phase 4 is two jobs, not one: each page needs a **recipe doc** written here (mine, none exist
+yet) and then **built in Looker** (yours). Phase 4 cannot start until Phase 3 is deployed —
+three of its four sources are tabs that do not exist in the spreadsheet yet.
+
+Update this table as phases complete, with the date. `diagnoseAreas()` now exists: run it from
+the Apps Script editor as the first thing in any session and **believe its output over this
+document**. It writes nothing.
 
 ---
 
@@ -43,7 +61,9 @@ category. So no existing tab can answer *"how am I doing in each area of my life
 question behind feeling lost about what to do next and whether anything is improving.
 
 This plan introduces an **area** dimension spanning projects, backfills it across all existing
-history, gives **Bills** a cycle-aware tab of its own, and gives **Work** its own tab and page.
+history, gives **Bills** a cycle-aware tab of its own, and gives **Work** its own page — on the
+shared `TaskDaily` tab, not a tab of its own. That last part changed during design: errands need
+exactly the same card-level aging, so one area-aware tab serves both.
 
 ---
 
@@ -92,13 +112,15 @@ history only ever accrues forward from the day a snapshot tab starts running.
 | Decision | Choice | Rationale |
 | --- | --- | --- |
 | Areas | `work`, `bills-taxes`, `errands`, `habits` | Four, matching the four sources of stress |
-| Area of a task | **Label → project default → `uncategorized`** | Most projects map cleanly; `Week` genuinely mixes. The label is the escape hatch |
+| Area of a task | **Label → project override → nearest mapped ancestor → `uncategorized`** | Most projects map cleanly; `Week` genuinely mixes. The label is the escape hatch. Four branches, not three — the ancestor walk is what makes new projects self-categorizing |
+| **Label coverage** | **Every task in the 16 child projects carries an `area-*` label. `Habits` carries none** | Chosen 2026-09-08, replacing label-only-on-`Week`. Inheritance was invisible in Todoist itself — you could not see your own categorization without running a script. `Habits` is excluded because its existing `habits` / `sub-habits` labels already say the same thing, and 71 rows of redundancy buys nothing |
+| `area-habits` | **Created, deliberately unused** | The `Habits` project resolves by project override, so no task needs the label. It stays as the escape hatch for a habit-area task living outside `Habits`. An unused label is the correct state, not an oversight |
 | Never guess | An unmapped project yields `uncategorized` | A visible undercount beats invisible inflation — the bargain `habits-contract.md` already strikes |
-| Honesty marker | `area_source`: `label` / `project` / `default` | Separates "you told me" from "I derived it", so a derived value can be excluded from a chart rather than silently averaged in as declared |
+| Honesty marker | `area_source`: `label` / `project` / `parent` / `default` | Separates "you told me" from "I derived it", so a derived value can be excluded from a chart rather than silently averaged in as declared. **Four values as built**: merging `project` (an explicit override) with `parent` (derived from the tree) would erase the distinction the column exists for |
 | Map keyed by | **`project_id`**, names in trailing comments | A rename would otherwise silently re-home every task |
 | `Week` | Default `errands`, **plus an orthogonal `in_week` flag** | `Week` is a focus view, not a category. `in_week` stops a prioritised bill booking itself as an errand |
 | Label naming | `area-work`, `area-bills-taxes`, `area-errands`, `area-habits` | The bare `work`, `bills`, `finance`, `taxes` labels exist meaning something else. Exact-token matching, so `work` never satisfies `area-work` |
-| **Subprojects** | **Yes** — three new parent projects; area derived from `parent_id` | Makes the map self-maintaining: a project created under a parent is categorized automatically, with no code edit. Costs one widening of `getProjectMap()`, done once |
+| **Subprojects** | **Yes** — three new parent projects; area derived from `parent_id` | Makes the map self-maintaining: a project created under a parent is categorized automatically, with no code edit. Costs a **companion** to `getProjectMap()` — `getProjectTree()` returning id → `{name, parentId}` — rather than widening it, so no existing caller changes |
 | Parent naming | **Emoji-prefixed**, and **no parent named `Habits`** | `getHabitsProjectId()` (`todoist-reschedule-habits.gs:198–204`) matches by exact name, first hit wins — a second `Habits` would silently break the habit reschedule. Distinct names also keep chart legends unambiguous |
 | Existing projects | **Never renamed**, only moved | Nesting preserves `project_id`, so all history survives. A *rename* would fork `project_name` mid-history and create a seam for no benefit |
 | **What is a bill** | A task whose area is `bills-taxes`. Recurring → one row per cycle; one-off → a single cycle row | The area label already marks it; no extra label needed |
@@ -109,8 +131,8 @@ history only ever accrues forward from the day a snapshot tab starts running.
 
 ### The target project tree
 
-Three new parent projects; the existing 19 move underneath, unrenamed. `Week`, `Habits` and
-`Inbox` stay top-level and resolve by explicit override.
+Three new parent projects; **16 of the existing 19 move underneath**, unrenamed. `Week`,
+`Habits` and `Inbox` stay top-level and resolve by explicit override.
 
 ```text
 💼 Work                 ← new parent          → area: work
@@ -151,8 +173,13 @@ reschedule (see Decisions).
 
 # Phase 1 — Categorize in Todoist
 
-**You, in Todoist. No code involved.** Everything here is additive and reversible: you are
-adding labels, not moving or renaming anything.
+> **Done 2026-09-08**, executed through the Todoist API rather than by hand. Everything below
+> is kept as the record of what was done and why — the resulting structure is what
+> `todoist-areas.gs` encodes, so changing Todoist without changing the map breaks the mapping.
+>
+> Reversibility, accurately stated: the **labels** are additive and trivially reversible, but
+> 1.2 **moved 16 projects** under new parents. That preserves every `project_id`, so no history
+> was harmed, but it is a structural change, not just tagging.
 
 ## 1.1 — Create the three parent projects
 
@@ -188,11 +215,17 @@ Leave `Week`, `Habits` and `Inbox` at the top level.
 historical `Completions` row keeps resolving correctly. A rename would fork `project_name`
 mid-history — old rows saying one thing, new rows another — for no gain.
 
-**Then run one check.** The In Review pipeline still queries by name
-(`todoist-sync-sections.gs:39–41`, `#Ascensus | #Work`), and Todoist's `#` matching may now see
-both `Work` and `💼 Work`. Open Todoist, run the filter `#Ascensus | #Work`, and confirm it
-returns the same tasks as before. If the parent leaks in, tell me — step 3.9 moves that pipeline
-to ids too.
+**The check was run, and the answer is no leak.** The In Review pipeline still queries by name
+(`todoist-sync-sections.gs:39–41`, `#Ascensus | #Work`), and the worry was that Todoist's `#`
+matching might now also see `💼 Work`. It does not: `##Work`, which explicitly *includes*
+sub-projects, returns the same 9 tasks as `#Work`. Had `#Work` bound to the parent, `##Work`
+would have pulled in `Study/Reading`, `Math` and `Quantified Self`.
+
+> **Correction to the original plan**: it said step 3.9 would move that pipeline to ids as well.
+> It did not — 3.9 became `TaskDaily`, and `todoist-sync-sections.gs` is **unchanged**. It stays
+> name-based because the emoji prefix was verified to make that safe. It is still the one
+> remaining name-based lookup in the project, so it is listed under
+> [Known gaps](#known-gaps-and-open-items).
 
 ## 1.3 — Create the four labels
 
@@ -205,7 +238,12 @@ tasks. Matching is exact-token, so `work` can never satisfy `area-work`.
 ## 1.4 — Tag the `Week` backlog *(the real work — 22 cards)*
 
 `Week` is the only project whose contents genuinely span areas, so it is the only place tagging
-is mandatory. Every other project inherits its default from the map.
+is **mandatory**. It was done first, before the coverage decision below changed the rest.
+
+> **Superseded in scope by 1.5.** At the time, every other project was to inherit its default
+> from the tree and carry no label. That was reversed the same day: everything outside `Habits`
+> is now labelled explicitly. `Week` remains the only project where a label is *load-bearing*
+> rather than a convenience, because its default is genuinely wrong for half its cards.
 
 | # | Card | Current labels | Add |
 | --- | --- | --- | --- |
@@ -243,15 +281,26 @@ is mandatory. Every other project inherits its default from the map.
 
 Neither changes any mechanism; both change which bar it lands in.
 
-## 1.5 — Tag the strays
+## 1.5 — Tag every task in the child projects
 
-One card sits in `Inbox`: *"Inestigate if the coffe offers internet"* (no labels) →
-`area-errands`, or file it into a project and let the default apply.
+Done 2026-09-08 — **112 tasks** labelled across the 16 child projects, on top of the 23 from
+1.4. Existing labels were preserved on every one; `area-*` was added, never substituted.
 
-Everywhere else, add an `area-*` label **only** where a task contradicts its project's default —
-a personal errand parked in `Work`, a work task in `Home`. There is no need to label the other
-~150 tasks; the map covers them. After Phase 3.1, `diagnoseAreas()` will list anything that
-still resolves to `uncategorized`.
+| Area | Tasks | Spread across |
+| --- | --- | --- |
+| `area-work` | 69 | Study/Reading 53, Work 9, Concentrix 3, Math 3, Quantified Self 1, Ascensus 0 |
+| `area-bills-taxes` | 15 | Credit Cards 6, Bills 5, Mortgage 2, SAT 2, Finance 0, Purchases 0 |
+| `area-errands` | 28 | Home 23, Challenger 3, Ford Focus 1, Misc 1 |
+
+The `Inbox` card *"Inestigate if the coffe offers internet"* took `area-errands` in 1.4.
+
+**`Habits` was left alone** — all 71 of its tasks. Its `habits` / `sub-habits` labels already
+carry that meaning, and the project override in step 3.1 resolves the area without help.
+
+**This does not retire the parent tree.** Labelling is a snapshot of today's ~135 open tasks;
+every task created tomorrow arrives unlabelled. The tree is what catches those, which is why
+`areaOf()` must still fall through to `parent_id` rather than treating a missing label as
+`uncategorized`. Labels are now the dense layer, the tree is the safety net — not the reverse.
 
 ## 1.6 — What the nesting buys you
 
@@ -263,24 +312,75 @@ Three things stay hand-maintained, and they are the exceptions by design: `Week`
 `Inbox` sit outside the tree and resolve by explicit override, and any individual task that
 contradicts its project gets an `area-*` label.
 
+This matters more now that 1.5 has labelled everything: those labels age. A task moved between
+projects keeps the label it was given, so where label and parent disagree, the label wins by
+design — which is right for a deliberate override and wrong for a stale one. `diagnoseAreas()`
+should report label/parent disagreements so a stale tag is visible rather than silently
+authoritative.
+
 `diagnoseAreas()` (step 3.1) reports any project whose parent it cannot resolve, so a project
 accidentally left at the top level surfaces rather than silently becoming `uncategorized`.
 
-### Phase 1 exit criteria
+### Phase 1 exit criteria — all met 2026-09-08
 
-- The three parent projects exist, emoji-prefixed, and **no project is named `Habits` twice**.
-- All 16 child projects sit under a parent; `Week`, `Habits` and `Inbox` remain top-level.
-- No existing project was renamed.
-- The filter `#Ascensus | #Work` still returns what it did before the reorg.
-- The four labels exist.
-- All 22 `Week` cards carry exactly one `area-*` label.
-- The `Inbox` card is filed or labelled.
+- [x] The three parent projects exist, emoji-prefixed, and **exactly one project is named `Habits`**.
+- [x] All 16 child projects sit under a parent; `Week`, `Habits` and `Inbox` remain top-level.
+- [x] No existing project was renamed — 16 moves, 0 renames, every `project_id` preserved.
+- [x] The filter `#Ascensus | #Work` returns what it did before the reorg.
+- [x] The four labels exist.
+- [x] All 22 `Week` cards carry exactly one `area-*` label — **8 work · 5 bills-taxes · 9 errands**,
+      the split this plan predicted.
+- [x] The `Inbox` card is labelled `area-errands`.
+- [x] Every task in the 16 child projects carries an `area-*` label. Verified by the filter
+      `!@area-work & !@area-bills-taxes & !@area-errands & !#Habits` returning **0 tasks**.
+- [x] `Habits` carries no area label at all — the inverse filter
+      `#Habits & (@area-work | @area-bills-taxes | @area-errands | @area-habits)` also returns **0**.
+
+**Final counts**: `area-work` 77 · `area-bills-taxes` 20 · `area-errands` 38 · `area-habits` 0.
+135 labelled tasks, 71 Habits tasks deliberately untouched.
+
+**The emoji prefix was verified to work, not assumed.** `#Work` still binds to the `Work`
+project alone: `##Work` — which explicitly includes sub-projects — returns the same 9 tasks as
+`#Work`. Had `#Work` resolved to `💼 Work`, `##Work` would have pulled in `Study/Reading`, `Math`
+and `Quantified Self`. So the In Review pipeline (`todoist-sync-sections.gs:39-41`) needs no
+change — and in the end received none. The id-based fetch that earlier drafts assigned to step
+3.9 was never built; 3.9 became `TaskDaily` instead. That file remains the project's last
+name-based lookup, safe but noted under [Known gaps](#known-gaps-and-open-items).
+
+`Ascensus` returned 0 tasks both by filter and by `project_id` — it is genuinely empty, which
+predates this reorg. Any future check of that filter should expect `Work` rows only.
+
+**Keep the three parents empty.** They are containers; the area of a task comes from its
+project's parent. A task filed *directly* into `💼 Work` would sit in a project with no parent
+entry of its own — `diagnoseAreas()` (step 3.1) must therefore treat a parent project holding
+tasks as a reportable condition, not just an unmapped id.
+
+### Project ids for step 3.1
+
+Recorded here because these are the only ids the code hardcodes; every other project resolves
+through its `parent_id`, which is the whole point of the tree.
+
+| Role | Project | `project_id` |
+| --- | --- | --- |
+| Parent → `work` | `💼 Work` | `6hRq7W9rfWC9x8R9` |
+| Parent → `bills-taxes` | `💰 Bills & Taxes` | `6hRq7WF8xRQGr3MV` |
+| Parent → `errands` | `📋 Errands` | `6hRq7WG9X5ghWhRM` |
+| Override → `habits` | `Habits` | `6g24MC65RvRwJ4wX` |
+| Override → `errands` + `in_week` | `Week` | `6hCMV4WJ343crQmc` |
+| Override → `errands` | `Inbox` | `6fgjwG76Qf3h2787` |
+
+Label ids, should a lookup ever need them: `area-work` `2184970412`, `area-bills-taxes`
+`2184970414`, `area-errands` `2184970413`, `area-habits` `2184970415`.
 
 ---
 
 # Phase 2 — Prepare the spreadsheet
 
-**You, in Google Sheets**, in `quantified-self-todoist`. Do this **before** Phase 3 runs.
+**You, in Google Sheets**, in `quantified-self-todoist`.
+
+> **No longer a prerequisite.** 2.1 became automatic when 3.3 shipped a layout guard. What is
+> left here is **2.0, the backup** — and that one matters more than ever, because 3.6 rewrites
+> cells in place.
 
 ## 2.0 — Duplicate the spreadsheet first
 
@@ -288,18 +388,20 @@ accidentally left at the top level surfaces rather than silently becoming `uncat
 is the durable completion store, its history predates the 90-day API window, and Phase 3 will
 run a repair that rewrites cells in place. A copy costs ten seconds.
 
-## 2.1 — Widen `Completions` *(the only tab needing manual work)*
+## 2.1 — Widen `Completions` *(now automatic)*
 
-Add three headers in **row 1, columns O, P, Q**, in this exact order, spelled exactly:
+> **No longer manual.** `ensureCompletionsAreaColumns()` (shipped in 3.3) names columns O–Q on
+> first run, grows the sheet if it is physically narrower than 17 columns, and **refuses to
+> overwrite** if O–Q already hold different values. Doing it by hand first is harmless — the
+> guard then finds the names already correct and does nothing.
+
+For reference, the columns it creates:
 
 ```text
 O: area
 P: area_source
 Q: was_overdue
 ```
-
-Leave the cells below empty — Phase 3 fills them. `Completions` has no header-writing code and
-no layout guard, so this is the one tab where the sheet must lead the script.
 
 **Do not reorder or rename columns A–N.** Every existing script reads them positionally.
 
@@ -311,8 +413,10 @@ character from the script's constant triggers the layout guard.
 
 ### Phase 2 exit criteria
 
-- A dated copy of the spreadsheet exists.
-- `Completions` row 1 reads `area`, `area_source`, `was_overdue` in O, P, Q.
+- A dated copy of the spreadsheet exists. **This is the part that still matters** — 3.6 will
+  rewrite cells in place, and `Completions` history predates the 90-day API window.
+- `Completions` row 1 reads `area`, `area_source`, `was_overdue` in O, P, Q — by hand, or left
+  to the guard in 3.3.
 - No other tab was touched.
 
 ---
@@ -324,24 +428,120 @@ Each step is independently deployable and independently verifiable.
 
 | Step | What | Unblocks |
 | --- | --- | --- |
-| 3.1 | `todoist-areas.gs` — parent→area map, `getProjectTree()`, pure `areaOf()`, `inWeekOf()`, `diagnoseAreas()` | everything |
-| 3.2 | `area-contract.md` — the authoring rules, incl. the bill definition and the `deadline` fossil | — |
-| 3.3 | `Completions`: row mapper writes `area`, `area_source`, `was_overdue` | 3.4, 3.5 |
-| 3.4 | `backfillCompletionAreas()` — fill existing rows from `project_id`; no API calls | 4a, 4d |
-| 3.5 | `backfillCompletions()` — extend history to ≈ 2026-02 in ≤90-day windows | 4a, 4d |
-| 3.6 | `repairCompletionDueDates()` — fix pre-2026-08-10 cycle attribution **in place** | 4a |
-| 3.7 | `BillCycle` tab + `schema/bill-cycle.md` + `backfillBillCycle()` | **4a** |
-| 3.8 | `AreaDaily` tab + `schema/area-daily.md` | 4b, 4d |
-| 3.9 | `TaskDaily` tab + `schema/task-daily.md` — card × day, area-aware | **4b, 4c** |
-| 3.10 | Triggers: register the new steps, add the morning bill-risk check | — |
-| 3.11 | Docs sweep — counts, module map, `history.md` seams | — |
+| **3.1 ✅** | `todoist-areas.gs` — parent→area map, `getProjectTree()`, pure `areaOf()`, `inWeekOf()`, `diagnoseAreas()` | everything |
+| **3.2 ✅** | `area-contract.md` — the authoring rules, incl. the bill definition and the `deadline` fossil | — |
+| **3.3 ✅** | `Completions`: row mapper writes `area`, `area_source`, `was_overdue` + a layout guard | 3.4, 3.5 |
+| **3.4 ✅** | `backfillCompletionAreas()` — fill existing rows from `project_id` | 4a, 4d |
+| **3.5 ✅** | `backfillCompletions()` — extend history to ≈ 2026-02 in ≤90-day windows | 4a, 4d |
+| **3.6 ✅** | `repairCompletionDueDates()` — fix pre-2026-08-10 cycle attribution **in place** | 4a |
+| **3.7 ✅** | `BillCycle` tab + `schema/bill-cycle.md` (no separate backfill — see below) | **4a** |
+| **3.8 ✅** | `AreaDaily` tab + `schema/area-daily.md` + `backfillAreaDaily()` | 4b, 4d |
+| **3.9 ✅** | `TaskDaily` tab + `schema/task-daily.md` — card × day, area-aware | **4b, 4c** |
+| **3.10 ✅** | Triggers: register the new steps, add the morning bill-risk check | — |
+| **3.11 ✅** | Docs sweep — counts, module map, `history.md` seams | — |
+
+### What 3.1 and 3.2 actually shipped
+
+`sheets/todoist/todoist-areas.gs` and `sheets/todoist/area-contract.md`, both new, no existing
+file touched. 36/36 harness assertions pass. **Four deviations from the spec above**, each
+deliberate:
+
+1. **`areaOf(projectId, labels, tree)` takes the tree as a third argument.** The spec wrote a
+   two-argument function and also called it pure; those cannot both hold once area derives
+   from the project tree. Injecting the tree keeps it genuinely pure and testable off
+   platform, and lets a caller fetch the tree **once** for a 200-task loop instead of hitting
+   the cache 200 times. Callers must pass `getProjectTree()`.
+2. **`area_source` has four values, not three:** `label` / `project` / `parent` / `default`.
+   The spec listed three, which would have merged "explicit override" with "derived from the
+   tree" — exactly the distinction the column exists to preserve. The sheet schema is
+   unchanged; only the value set is wider.
+3. **The ancestor walk is a loop, not a single parent lookup**, with a depth guard of 10.
+   Today's tree is one level deep, so this changes nothing now; it means a future
+   sub-sub-project resolves correctly, and a cyclic `parent_id` cannot hang a nightly sync.
+   Both cases are covered by the harness.
+4. **`diagnoseAreas()` reports four conditions the spec did not name**: parent projects
+   holding tasks directly, tasks tagged with two area labels, labels that disagree with the
+   tree (the stale-tag detector), and projects no rule can resolve. The last one is the
+   valuable addition — it catches a project left at the top level *before* its tasks start
+   showing up as `uncategorized`.
+
+`areaLabelsOn(labels)` is a small extra export, used by the diagnostic to spot ambiguity.
+
+> **Wiring status** (superseding the note that stood here while 3.1 was the only step done):
+> `todoist-areas.gs` still writes nothing itself, but it is no longer a leaf — `BillCycle`,
+> `AreaDaily`, `TaskDaily` and the `Completions` row mapper all call `areaOf()`, and 3.10 added
+> the three sync steps to `syncTodoist()`. Pasting the files in therefore **does** change what
+> the nightly run does. `diagnoseAreas()` remains read-only and is still the right first thing
+> to run.
+
+### What 3.3–3.5 shipped
+
+All in `todoist-sync-completions.gs`; no new file.
+
+- **`completionRow()` was extracted** from the inline mapper and is now shared by the nightly
+  sync and the backfill. Two copies of a 17-column layout is precisely how a column drifts out
+  of alignment with its schema doc.
+- **`ensureCompletionsAreaColumns()`** names O–Q, grows a physically narrow sheet, and throws
+  rather than overwriting columns that already hold something else.
+- **`was_overdue` is captured** from `extra_data.was_overdue`, which was previously read past
+  and discarded. It is written **blank, not `FALSE`, when unknown** — only recurring activity
+  events carry it, and "unknown" must never read as "on time" in a bills chart.
+- **`backfillCompletionAreas()`** fills blanks only. It never rewrites a row that already has
+  an area, so re-running is a no-op and a later re-parenting cannot quietly rewrite history.
+  One deviation: it needs the project tree, so it makes one cached `/projects` call rather than
+  the zero the spec promised.
+- **`backfillCompletions(since)`** loops ≤90-day windows back to `2026-02-01`. It leaves
+  `TODOIST_LAST_SYNC` untouched — the nightly cursor must keep meaning "caught up to now" — and
+  **skips the In Review source entirely**, because that is a state snapshot rather than history
+  and replaying it would invent movement events that never happened. It also dedups *within*
+  the run, since adjacent windows share a boundary instant.
+
+13 further harness assertions cover the row shape: width 17, area/source resolution into O–P,
+and all four `was_overdue` states including the blank-not-FALSE rule.
+
+### What 3.6–3.11 shipped
+
+Three new files — `todoist-bill-cycle.gs`, `todoist-area-daily.gs`, `todoist-task-daily.gs` —
+plus `repairCompletionDueDates()`, `daysBetweenDays()` and `archiveAndRecreateSheet()` in the
+shared layer, three schema docs, and the docs sweep. **114 harness assertions pass in total.**
+
+- **3.6** is the only function in the project that rewrites existing cells. It is scoped to
+  recurring rows whose `sync_date` predates the fix, matches events by `task_id|day` (falling
+  back to an exact timestamp when a task was closed twice in a day), and **leaves unmatched
+  rows alone** rather than blanking a date it could not re-verify.
+- **3.7** has **no separate backfill entry point**, deviating from the spec. `syncBillCycle()`
+  is a full rebuild from `Completions` plus the live list, so the nightly path already reaches
+  all of history; a `backfillBillCycle()` would have been a second name for the same call, and
+  the global scope is flat.
+- **3.10** puts `checkBillRisk()` on its own **morning** trigger rather than inside
+  `syncTodoist()`. A 23:30 warning about a bill due that day is useless, and this is the
+  trigger that would actually have caught the 24-day-late internet bill.
+- **`pruneTaskDaily()` is deliberately manual.** The size ceiling is real (~1.6M cells a year
+  against 10M shared across every tab), but silently deleting observations that nothing can
+  rebuild is not a job for a nightly trigger. The sync warns as the ceiling approaches.
+
+> **A correction the harness forced.** The first run of the bill harness disagreed with the
+> research by exactly one day on three bills. The cause was the *stub*, not the code: it
+> formatted dates in UTC, and those bills were checked off at 00:18 UTC = 18:18 the previous
+> day locally — reproducing precisely the bug `history.md` records for 2026-08-20. The code
+> was right; the plan's expected numbers were UTC-derived. See Verification 6.
 
 ### Notes on the load-bearing steps
 
-**3.1** — resolution order is **label → project override → project's parent → `uncategorized`**.
-`areaOf()` stays pure and is the single source of truth every tab reads; multiple area labels
-resolve in a fixed order, never the task's own label order, which Todoist does not guarantee.
-Reuses `splitLabels()` / `hasLabel()` (`todoist-habit-daily.gs:677`, `:684`).
+**3.1** — resolution order is **label → project override → nearest mapped ancestor →
+`uncategorized`**. `areaOf()` stays pure and is the single source of truth every tab reads;
+multiple area labels resolve in a fixed order (`bills-taxes` → `work` → `habits` → `errands`),
+never the task's own label order, which Todoist does not guarantee. Reuses `splitLabels()` /
+`hasLabel()` (`todoist-habit-daily.gs:677`, `:684`).
+
+> **What 1.5 changed for this step.** Open tasks now resolve at the *label* branch almost
+> universally, so `area_source` reads `label` for ~135 tasks and `project` for the 71 in
+> `Habits`. The parent branch will look dead on today's data — it is not. It is what catches
+> every task created from now on, and removing it would make each new task `uncategorized`.
+> Keep the branch and keep it tested, even though a live run exercises it only via `Habits`.
+> Note also that historical `Completions` rows still resolve at the *parent* branch, since their
+> `labels` column is frozen at capture — so `area_source` genuinely varies across the sheet, and
+> a chart that averages declared and derived rows together is mixing two things.
 
 This step also **widens the project cache**. `getProjectMap()` returns id→name only, with no
 `parent_id`, so deriving area from the tree needs a sibling `getProjectTree()` returning
@@ -395,26 +595,80 @@ re-deriving them would be waste:
 `backlog`/`active`/`review`/`done`/`blocked`/`canceled`, with `Quiz` folding into `review`, an
 explicit `other` branch as the rename tripwire, and blank where a project has no sections.
 
-> **Size check.** ~200 open tasks × 22 columns × 365 days ≈ 1.6M cells a year, against a
-> 10M-cell limit shared by every tab in the spreadsheet. Fine for two to three years, then it
-> is not. Decide the retention rule when building it — a rolling window, or its own
-> spreadsheet — rather than discovering the ceiling later.
+> **Size check — decided.** ~200 open tasks × 22 columns × 365 days ≈ 1.6M cells a year,
+> against a 10M-cell limit shared by every tab in the spreadsheet. Fine for two to three years.
+> The rule is `pruneTaskDaily(keepDays)`, and it is **manual on purpose**: these rows are
+> observations nothing can rebuild, so deleting them is a decision rather than maintenance. The
+> sync logs a warning past ~4M cells. `AreaDaily` keeps the daily counts regardless, so pruning
+> costs card-level detail, not the trend.
 
 ### Phase 3 exit criteria
 
-- `diagnoseAreas()` reports `uncategorized = 0` and no unmapped project id.
-- Earliest `Completions` row ≈ 2026-02; no blank `area`; re-running 3.5 adds zero rows.
-- `BillCycle` reproduces the research numbers — see Verification 6.
-- `TaskDaily` created with its full header; a second same-day run leaves the row count unchanged.
-- Full `syncTodoist()` logs success on every step, `HabitDaily` still last.
+Split by what can be proven off-platform and what genuinely needs the code deployed. Everything
+in the first group is **done**; nothing in the second has been checked, because nothing is
+deployed.
+
+**Verified in the repo (2026-09-08)**
+
+- [x] All 11 `.gs` files parse; the four new/edited ones are prettier-clean.
+- [x] 114 harness assertions pass — `areaOf()` across all four branches, the exact-token guard,
+      multi-label precedence, the 17-column row shape, bill status and streaks against the
+      research numbers, and `TaskDaily`'s four mechanisms.
+- [x] No new global collides in the flat scope (the only duplicate is the pre-existing
+      `toDateString`, documented in `typescript-port.md`).
+- [x] Every relative link in every touched doc resolves.
+
+**Needs a live run — none of these have happened yet**
+
+- [ ] `diagnoseAreas()` reports `uncategorized = 0` and no unmapped project id.
+- [ ] Earliest `Completions` row ≈ 2026-02; no blank `area`; re-running 3.5 adds zero rows.
+- [ ] `BillCycle` reproduces the research numbers — see Verification 6, **and read the timezone
+      correction there before calling it a failure**.
+- [ ] `TaskDaily` created with its full header; a second same-day run leaves the row count
+      unchanged and every `section_entered_on` identical.
+- [ ] Full `syncTodoist()` logs success on all eight steps, `HabitDaily` still last.
+
+---
+
+# Deploying
+
+Order matters — two steps rewrite existing data, and one of them cannot be undone without the
+backup.
+
+| # | Do this | Why this position |
+| --- | --- | --- |
+| 1 | Paste all **ten** `sheets/todoist/*.gs` files into `quantified-self-sync` | Four are new. The flat scope means a missing file is a runtime `ReferenceError`, not a load error |
+| 2 | Run `diagnoseAreas()` | Read-only. Confirms the ids in this document still match the account **before** anything writes |
+| 3 | **Back up the spreadsheet** (Phase 2.0) | The last moment this is cheap |
+| 4 | `backfillCompletionAreas()` | Fills `area`/`area_source` on existing rows. Blanks only, so it is safe to repeat |
+| 5 | `backfillCompletions()` | Extends history to ≈ 2026-02. Dedup makes re-runs no-ops |
+| 6 | `repairCompletionDueDates()` | **Rewrites cells.** Must come *after* 5, so it repairs everything, and *before* 7 |
+| 7 | `syncTodoist()` | Creates `BillCycle`, `AreaDaily`, `TaskDaily` with their headers |
+| 8 | `backfillAreaDaily()` | Fills `completed` for past days; snapshot columns stay blank |
+| 9 | Add the `checkBillRisk` morning trigger (~08:00) | Separate from the nightly run on purpose |
+
+**Skipping step 6 is the expensive mistake.** Without it every bill cycle before 2026-08-10 is
+attributed to the following month, and the Bills report is quietly wrong about exactly the
+history you built it to see.
 
 ---
 
 # Phase 4 — Build the reports
 
-**You, in Looker Studio.** Each sub-phase gets its own recipe doc written during Phase 3,
-precise enough to follow click-by-click and to rebuild from if the page is ever lost — the
-format `analytics/habits-page.md` already uses.
+**You, in Looker Studio.** Each sub-phase gets its own recipe doc, precise enough to follow
+click-by-click and to rebuild from if the page is ever lost — the format
+`analytics/habits-page.md` already uses.
+
+> **None of the four recipe docs exist yet.** An earlier draft said they would be written during
+> Phase 3; they were not, and they are not in the 3.1–3.11 step table either. Writing them is
+> the first task of Phase 4, and it is mine — the sections below are the specification for what
+> each one must contain, not the recipes themselves.
+
+The three data sources are already registered in
+[`../../analytics/README.md`](../../analytics/README.md), together with the **filters that must
+be applied before charting** — `counts_observed = TRUE` on `AreaDaily`'s snapshot columns,
+`section_age_seeded = FALSE` before averaging section age, and `is_exit = FALSE` for
+"what is open now". Skipping those produces charts that look plausible and are wrong.
 
 Every recipe carries forward the same conventions: the state-vs-event date-range warning,
 numeric-prefixed labels so Looker's alphabetical sort does not scramble an ordered dimension,
@@ -474,25 +728,27 @@ in-week alignment: is my week aimed where I said it was?
 
 ## Files
 
-**Create**: `sheets/todoist/todoist-areas.gs` · `todoist-bill-cycle.gs` ·
+**Created ✅** — `sheets/todoist/todoist-areas.gs` · `todoist-bill-cycle.gs` ·
 `todoist-area-daily.gs` · `todoist-task-daily.gs` · `sheets/todoist/area-contract.md` ·
-`schema/bill-cycle.md` · `schema/area-daily.md` · `schema/task-daily.md` ·
-`analytics/bills-page.md` · `analytics/errands-page.md` · `analytics/work-page.md` ·
-`analytics/areas-page.md`
+`schema/bill-cycle.md` · `schema/area-daily.md` · `schema/task-daily.md`
 
-**Modify**: `todoist-sync.gs` · `todoist-sync-completions.gs` · `schema/completions.md` ·
-`history.md` · `sheets/todoist/README.md` ·
-`sheets/README.md` · `docs/todoist/architecture.md` · `analytics/README.md` · both palette docs ·
-root `README.md`
+**Still to create** (Phase 4) — `analytics/bills-page.md` · `analytics/errands-page.md` ·
+`analytics/work-page.md` · `analytics/areas-page.md`
 
-**Reuse**: `todoistGetPaged`, `getProjectMap`, `splitLabels`, `hasLabel`, `dateKey`,
+**Modified ✅** — `todoist-sync.gs` · `todoist-sync-completions.gs` · `todoist-sync-utils.gs` ·
+`schema/completions.md` · `history.md` · `sheets/todoist/README.md` · `sheets/README.md` ·
+`docs/todoist/architecture.md` · `analytics/README.md` · both palette docs · root `README.md`
+
+**Reused** — `todoistGetPaged`, `getProjectMap`, `splitLabels`, `hasLabel`, `dateKey`,
 `localDateString`, `localDayOf`, `nextStreak`, and `replaceHabitDailyRows`'s clear-then-append
 idiom.
 
-**Re-add**: `daysBetweenDays(fromDay, toDay)` in `todoist-sync-utils.gs` — whole days between
-two calendar days, both ends anchored to UTC midnight so a span crossing a DST change stays
-exact, inputs sliced to 10 chars so a floating due datetime works. It existed for the deleted
-board tab and was removed with it rather than left as an unused global; step 3.7 needs it.
+**Added to the shared layer** — `daysBetweenDays(fromDay, toDay)`, re-added for step 3.7 after
+being removed with the deleted board tab: whole days between two calendar days, both ends
+anchored to UTC midnight so a span crossing a DST change stays exact, inputs sliced to 10 chars
+so a floating due datetime works. Plus `archiveAndRecreateSheet()`, which `AreaDaily` and
+`TaskDaily` both need — they are observed, not derived, so an incompatible layout change must
+rename the tab rather than clear it.
 
 ### Interaction with `typescript-port.md`
 
@@ -503,9 +759,13 @@ they match the `*_HEADER` constants — so every column added here must land in 
 
 ## Verification
 
-1. `node --check` on every touched `.gs`. `npm run format` on **new files only** — the committed
-   `.gs` predate the current `tabWidth: 8` config, so a repo-wide run rewrites ~150 untouched
-   lines. `npm test` is a stub that always exits 1.
+1. `node --check` on every touched `.gs` — note it rejects the `.gs` extension, so copy to a
+   `.js` in the scratchpad first. `npm run format` on **new and touched files only**: the
+   committed `.gs` predate the current `tabWidth: 8` config, so a repo-wide run rewrites ~150
+   untouched lines. In practice this cost 7 reformatted lines in `todoist-sync-completions.gs`
+   and 1 in `todoist-sync.gs`, all mechanical.
+   `todoist-habit-daily.gs` and `todoist-reschedule-habits.gs` were **not** touched and remain
+   unformatted — that is deliberate, not an oversight. `npm test` is a stub that always exits 1.
 2. Scratchpad harness per the `hd-harness.js` / `bd-harness.js` precedent: `areaOf()` across all
    four resolution paths; **a bare `work` label must not satisfy `area-work`**; multi-label
    resolution order; bill-cycle derivation (`cycle_due_date` → `cycle`, `days_late` sign);
@@ -516,16 +776,38 @@ they match the `*_HEADER` constants — so every column added here must land in 
    no project whose parent it cannot resolve.
 4. **After Phase 2**: `Completions` row 1 reads `area`, `area_source`, `was_overdue` in O–Q.
 5. **After 3.5**: earliest `Completions` row ≈ 2026-02; a re-run adds zero rows.
-6. **After 3.7 — check against the research numbers.** Electricity 2026-08 late by 12 days,
-   internet 2026-08 by 24, Telcel 2026-08 by 10, building maintenance 2026-08 closed early,
-   `Pay predial` open and 31+ days overdue. If these do not reproduce, cycle attribution is
-   wrong — stop before building 4a.
+6. **After 3.7 — check against the research numbers, corrected for timezone.** The research
+   figures (12 / 24 / 10 days late) were measured against the **UTC** date 2026-09-08. Those
+   three bills were checked off at 00:18 UTC, which is **18:18 on 2026-09-07 in the script's
+   timezone** — so counted on the local day, which is what `BillCycle` uses and what every
+   other tab uses, they are **11 / 23 / 9**. Expect the local figures; seeing them is the
+   check passing, not failing. Building maintenance 2026-08 still reads closed early (−6, a
+   midday completion, unaffected), and `Pay predial` open and 31+ days overdue. If these do
+   not reproduce, cycle attribution is wrong — stop before building 4a.
 7. **Cross-check a backfilled week** against Todoist's own completed-task list for the same
    window; per-area counts must match.
 8. **After 3.9**: a second same-day run of `syncTaskDaily()` leaves the row count unchanged and
    every `section_entered_on` identical — proof the prior-state read is strictly-before.
 9. Full `syncTodoist()`: every step logs success, `HabitDaily` still runs last.
 10. Each report: walk its own recipe's verification list.
+
+## Known gaps and open items
+
+Things that are true, deliberate, and easy to mistake for bugs later.
+
+| Gap | Status | Detail |
+| --- | --- | --- |
+| **Nothing is deployed** | Open | All of Phase 3 exists only in the repo. See [Deploying](#deploying) |
+| **The four Looker recipe docs do not exist** | Open — first task of Phase 4 | `analytics/{bills,errands,work,areas}-page.md`. The Phase 4 sections here are their specification |
+| **`todoist-sync-sections.gs` is still name-based** | Accepted, not fixed | It queries `#Ascensus \| #Work`. Verified safe — `##Work` proves `#Work` binds to the child, not `💼 Work`. It breaks only if someone creates a project whose name collides, or renames one of those two |
+| **A bill cycle that was never closed is invisible** | Accepted, documented | No completion event exists to key a row on. A deliberate undercount, per the house rule of undercounting rather than fabricating |
+| **`TaskDaily` cannot be backfilled at all** | Structural | Todoist keeps no history of what was open on a past day, and `item:updated` carries no `section_id`. Its first run seeds *every* row's section age as a floor |
+| **`AreaDaily`'s snapshot columns start empty** | Structural | Only `completed` reaches backwards. `counts_observed` marks which is which |
+| **`repairCompletionDueDates()` cannot reach everything** | Structural | Todoist's activity log retains roughly 12 months. Rows older than that keep their pre-fix value and are reported as unmatched rather than blanked |
+| **`Ascensus` is empty** | Not a bug | 0 tasks by filter and by `project_id`, predating the reorg. Expect `Work` rows only from that filter |
+| **`area-habits` is applied to nothing** | Correct state | `Habits` resolves by project override. The label stays as the escape hatch for a habit-area task living outside `Habits` |
+| **Two `.gs` files are not prettier-clean** | Deliberate | `todoist-habit-daily.gs`, `todoist-reschedule-habits.gs`. Formatting them would churn ~150 untouched lines into an unrelated diff |
+| **`sheets/README.md` links to two deleted files** | Pre-existing | `schema.md` and `apps-script.gs`, removed in commit `4ab0446`. Unrelated to this plan; noted so it is not mistaken for collateral damage |
 
 ## Rejected
 

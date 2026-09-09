@@ -34,7 +34,8 @@ function todoistGet(path, params) {
 // Returns the parsed response; logs (but does not throw on) per-command failures so a
 // partial batch is visible rather than silent.
 function todoistSync(commands) {
-	if (!commands || commands.length === 0) return { ok: true, empty: true };
+	if (!commands || commands.length === 0)
+		return { ok: true, empty: true };
 	const response = UrlFetchApp.fetch(`${TODOIST_BASE}/sync`, {
 		method: "post",
 		contentType: "application/json",
@@ -45,7 +46,9 @@ function todoistSync(commands) {
 	const code = response.getResponseCode();
 	const body = response.getContentText();
 	if (code >= 300) {
-		throw new Error(`Todoist sync → HTTP ${code}: ${body.slice(0, 300)}`);
+		throw new Error(
+			`Todoist sync → HTTP ${code}: ${body.slice(0, 300)}`,
+		);
 	}
 	const parsed = JSON.parse(body);
 	// sync_status maps each command uuid → "ok" or an error object; surface failures.
@@ -266,6 +269,19 @@ function localDateString(date) {
 	);
 }
 
+// Shift a Date by whole days and hand back a NEW Date, using local calendar arithmetic
+// (setDate handles month and year rollover, and negative values step backwards).
+//
+// Distinct from daysBetweenDays() below and NOT interchangeable with it: this produces a
+// Date to act on, in the local calendar; that one measures a span between two day strings
+// and anchors both ends to UTC midnight so a DST crossing cannot round wrong. Consolidating
+// them would break one caller or the other.
+function addDays(date, days) {
+	const copy = new Date(date.getTime());
+	copy.setDate(copy.getDate() + days);
+	return copy;
+}
+
 // A timestamp as a YYYY-MM-DD in the SCRIPT's timezone. Stored values are UTC, so an
 // event at 20:00 in a UTC-6 zone carries the FOLLOWING UTC date — formatting it as
 // UTC would file every evening event one day late.
@@ -275,9 +291,16 @@ function localDateString(date) {
 // this, and HabitDaily is simply the first to need it.
 function localDayOf(cellValue) {
 	if (!cellValue) return "";
-	const d = cellValue instanceof Date ? cellValue : new Date(String(cellValue));
+	const d =
+		cellValue instanceof Date
+			? cellValue
+			: new Date(String(cellValue));
 	if (isNaN(d.getTime())) return "";
-	return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd");
+	return Utilities.formatDate(
+		d,
+		Session.getScriptTimeZone(),
+		"yyyy-MM-dd",
+	);
 }
 
 // Normalise a sheet cell value to a YYYY-MM-DD key for comparison.
@@ -287,4 +310,45 @@ function localDayOf(cellValue) {
 function dateKey(cellValue) {
 	if (cellValue instanceof Date) return toDateString(cellValue);
 	return String(cellValue || "");
+}
+
+// Whole days between two calendar days: positive when `toDay` is after `fromDay`,
+// negative when it is before. Both ends are anchored to UTC midnight so a span crossing
+// a DST change stays exact — subtracting two local Dates across a clock change yields
+// 23 or 25 hours and rounds to the wrong day. Inputs are sliced to 10 chars, so a
+// floating due datetime ("2026-09-15T11:00:00") works as well as a plain "2026-09-15".
+// Returns "" rather than NaN when either end is missing or unparseable, so a blank due
+// date propagates as a blank cell instead of poisoning a sum.
+function daysBetweenDays(fromDay, toDay) {
+	const a = String(fromDay || "").slice(0, 10);
+	const b = String(toDay || "").slice(0, 10);
+	if (!a || !b) return "";
+	const from = new Date(`${a}T00:00:00Z`);
+	const to = new Date(`${b}T00:00:00Z`);
+	if (isNaN(from.getTime()) || isNaN(to.getTime())) return "";
+	return Math.round((to.getTime() - from.getTime()) / 86400000);
+}
+
+// Rename a tab out of the way and hand back a fresh one carrying `header`.
+//
+// For tabs whose rows are OBSERVED rather than derived: a snapshot of what was open on a
+// past day cannot be re-fetched from anywhere, so an incompatible layout change must not
+// clear them the way a derived tab can. Renaming keeps the old data readable beside the
+// new tab and makes the seam obvious, at the cost of a tab you have to clean up by hand
+// once you have decided you no longer need it.
+function archiveAndRecreateSheet(ss, sheet, name, header) {
+	const stamp = localDateString(new Date());
+	let archiveName = `${name}-archive-${stamp}`;
+	let n = 2;
+	while (ss.getSheetByName(archiveName)) {
+		archiveName = `${name}-archive-${stamp}-${n++}`;
+	}
+	sheet.setName(archiveName);
+	Logger.log(
+		`${name}: layout changed — existing rows are observations that cannot be ` +
+			`rebuilt, so the old tab was kept as "${archiveName}" rather than cleared.`,
+	);
+	const fresh = ss.insertSheet(name);
+	fresh.getRange(1, 1, 1, header.length).setValues([header]);
+	return fresh;
 }

@@ -19,12 +19,30 @@ Add these as separate data sources in Looker Studio (one per tab):
 | QS - Daily Summary | quantified-self-everhour | DailySummary |
 | QS - HabitDaily | quantified-self-todoist | HabitDaily |
 | QS - RecurringStatus | quantified-self-todoist | RecurringStatus |
+| QS - BillCycle | quantified-self-todoist | BillCycle |
+| QS - AreaDaily | quantified-self-todoist | AreaDaily |
+| QS - TaskDaily | quantified-self-todoist | TaskDaily |
 
 **To add each**: Looker Studio → Add data → Google Sheets → select the sheet → select the tab → Add.
 
 `QS - HabitDaily` and `QS - RecurringStatus` power the **Habits** page — a separate build,
 since it has its own calculated fields, layout, and filters. See
 [`habits-page.md`](habits-page.md) for the full recipe.
+
+`QS - BillCycle`, `QS - AreaDaily` and `QS - TaskDaily` power the life-area pages (Bills,
+Errands, Work, Areas overview) — see
+[`../docs/plans/life-areas.md`](../docs/plans/life-areas.md) Phase 4. Two of them carry an
+honesty flag that **must** be filtered on before charting:
+
+| Source | Filter first | Why |
+| --- | --- | --- |
+| `QS - AreaDaily` | `counts_observed = TRUE` before plotting `open` / `overdue` / `in_week` / `p1_open` | Those columns are snapshots and are **blank** on backfilled rows. Unfiltered, every series appears to start at nothing and climb |
+| `QS - TaskDaily` | `section_age_seeded = FALSE` before averaging `days_in_section` | A seeded value is a lower bound, not a measurement — on the first run it is every row |
+| `QS - TaskDaily` | `is_exit = FALSE` for "what is open now" | Exit rows are terminal records of departed tasks |
+
+`QS - BillCycle` needs no such filter, but note that `was_overdue` **blank means unknown, not
+on-time**, and `deadline_date` is excluded from every urgency calculation because Todoist
+never advances a deadline when a task recurs.
 
 ---
 

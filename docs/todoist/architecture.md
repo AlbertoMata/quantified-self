@@ -1,6 +1,6 @@
 # Todoist Sync — Architecture
 
-Structural reference for the six scripts in [`sheets/todoist/`](../../sheets/todoist/).
+Structural reference for the ten scripts in [`sheets/todoist/`](../../sheets/todoist/).
 Written to be read by someone porting this functionality to another language or
 framework: what the modules are, what they talk to, what state they keep, and which
 behaviours are load-bearing rather than incidental.
@@ -13,7 +13,7 @@ not repeated here.
 
 ## 1. Runtime model
 
-All six `.gs` files are **one Google Apps Script project**, not six modules. Apps Script
+All ten `.gs` files are **one Google Apps Script project**, not ten modules. Apps Script
 concatenates them into a single flat global scope before execution.
 
 | Property | Consequence |
@@ -45,6 +45,10 @@ flowchart TD
         KARMA["syncKarmaStats()"]
         RECUR["syncRecurringStatus()"]
         HABIT["todoist-habit-daily.gs<br/>syncHabitDaily()"]
+        AREAS["todoist-areas.gs<br/>areaOf() — pure, no writes"]
+        BILL["todoist-bill-cycle.gs<br/>syncBillCycle()"]
+        ADAY["todoist-area-daily.gs<br/>syncAreaDaily()"]
+        TDAY["todoist-task-daily.gs<br/>syncTaskDaily()"]
     end
 
     subgraph Sheets["quantified-self-todoist"]
@@ -53,6 +57,9 @@ flowchart TD
         T3[("KarmaStats")]
         T4[("RecurringStatus")]
         T5[("HabitDaily")]
+        T6[("BillCycle")]
+        T7[("AreaDaily")]
+        T8[("TaskDaily")]
     end
 
     API["Todoist API v1<br/>read-only"]
@@ -99,7 +106,7 @@ Entry points and core logic only; helpers are omitted.
 
 | Function | Role |
 | --- | --- |
-| `syncTodoist()` | Trigger entry point. Runs the five steps in isolation so one failing endpoint cannot abort the rest, collects errors, and throws a combined message at the end so failures surface in the execution dashboard. |
+| `syncTodoist()` | Trigger entry point. Runs the eight steps in isolation so one failing endpoint cannot abort the rest, collects errors, and throws a combined message at the end so failures surface in the execution dashboard. |
 | `syncTodoistIntraday()` | Hourly entry point. A no-op outside 07:00–23:00 script-local, otherwise `syncTodoist()`. Apps Script hourly triggers cannot be limited to part of the day, so the window is enforced in code. |
 | `syncOverdue()` | Writes `Overdue` from `/tasks/filter?query=overdue`. |
 | `syncKarmaStats()` | Writes `KarmaStats` from the productivity-stats endpoint. |
@@ -119,6 +126,38 @@ Entry points and core logic only; helpers are omitted.
 | Function | Role |
 | --- | --- |
 | `fetchSectionMovementCompletions()` | Source 3. Returns every task currently sitting in an "In Review" section of a target project, shaped like a completion event. A **state snapshot**, not an event stream — see [`schema/completions.md`](../../sheets/todoist/schema/completions.md#in-review). |
+
+### `todoist-areas.gs` — the life-area map
+
+No writes. `areaOf(projectId, labels, tree)` is **pure** — the project tree is injected, not
+fetched, so a 200-task loop resolves with one cached `/projects` call and the function stays
+testable off-platform. Resolution runs label → project override → nearest mapped ancestor →
+`uncategorized`, and reports which branch answered via `area_source`.
+
+`getProjectTree()` is a companion to `getProjectMap()` rather than a replacement: the latter
+returns id→name and has several callers, none of which should have to learn about parents.
+
+`diagnoseAreas()` is read-only and is the first thing to run in any session — it reports the
+`uncategorized` worklist, tasks tagged two ways, labels that disagree with the tree, parent
+projects wrongly holding tasks, and projects no rule can resolve.
+
+### `todoist-bill-cycle.gs` — the `BillCycle` tab
+
+One row per bill per **cycle**, not per day. `status` comes from Todoist's own `was_overdue`
+where it exists, because batch check-offs make `completed_at` useless for on-time
+measurement; `days_late` is reported separately from the dates. Where they disagree, the
+check-off was retroactive. `checkBillRisk()` is the separate morning read-only trigger.
+
+### `todoist-area-daily.gs` — the `AreaDaily` rollup
+
+Dense area × day counts, section-agnostic by construction. `completed` derives from
+`Completions` and backfills; the other counts are snapshots and only accrue forward, which
+`counts_observed` marks.
+
+### `todoist-task-daily.gs` — the `TaskDaily` snapshot
+
+One row per open task per day, with section aging seeded in four cases, terminal exit rows,
+and a strictly-before prior-state read. None of it can be backfilled.
 
 ### `todoist-habit-daily.gs` — the `HabitDaily` grid
 
@@ -157,6 +196,15 @@ re-runs safe.
 | `KarmaStats` | Upsert in place | `date` |
 | `RecurringStatus` | Append one row per recurring task per day | `snapshot_date \| task_id` |
 | `HabitDaily` | Rebuild a trailing window from scratch (full span when the tab is empty) | `date \| task_id` |
+| `BillCycle` | Full rebuild every run — derived, so nothing is lost | `task_id \| cycle_due_date` |
+| `AreaDaily` | Full replace of today's rows, then append | `snapshot_date \| area` |
+| `TaskDaily` | Full replace of today's rows, then append | `snapshot_date \| task_id` |
+
+**Two of these are observed, not derived**, and that changes what a layout change may do.
+`TaskDaily` — and `AreaDaily`'s snapshot columns — record what was true on a day that cannot
+be re-observed, so an incompatible header **archives** the tab (`archiveAndRecreateSheet()`)
+rather than clearing it. Derived tabs (`HabitDaily`, `BillCycle`) may safely be wiped and
+rebuilt. Getting this backwards silently destroys the only copy of that history.
 
 ---
 

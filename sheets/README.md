@@ -10,7 +10,7 @@ Four Google Sheets, one per data source. Each is an independent spreadsheet — 
 | --- | --- | --- | --- |
 | `quantified-self-log` | `Log` | Apps Script webhook (push from Shortcuts) | [schema.md](schema.md) |
 | `quantified-self-health` | `Health` | `health-webhook.gs` ← "Health Sync" shortcut (daily 23:55) | [schema-health.md](schema-health.md) |
-| `quantified-self-todoist` | `Completions`, `Overdue`, `KarmaStats`, `RecurringStatus`, `HabitDaily` | `todoist-sync.gs` (nightly 23:30 + hourly 07:00–23:00) | [todoist/README.md](todoist/README.md) |
+| `quantified-self-todoist` | `Completions`, `Overdue`, `KarmaStats`, `RecurringStatus`, `HabitDaily`, `BillCycle`, `AreaDaily`, `TaskDaily` | `todoist-sync.gs` (nightly 23:30 + hourly 07:00–23:00) | [todoist/README.md](todoist/README.md) |
 | `quantified-self-everhour` | `TimeEntries`, `DailySummary` | `everhour-sync.gs` (nightly 23:45) | [schema-everhour.md](schema-everhour.md) |
 
 ---
@@ -25,6 +25,10 @@ Four Google Sheets, one per data source. Each is an independent spreadsheet — 
 | [todoist-sync-utils.gs](todoist/todoist-sync-utils.gs) | **Standalone** project `quantified-self-sync` (same) | Shared HTTP, caching, and utility functions |
 | [todoist-sync-completions.gs](todoist/todoist-sync-completions.gs) | **Standalone** project `quantified-self-sync` (same) | Completion sync logic + complexity extraction |
 | [todoist-sync-sections.gs](todoist/todoist-sync-sections.gs) | **Standalone** project `quantified-self-sync` (same) | Section movement tracking ("In Review" sections) |
+| [todoist-areas.gs](todoist/todoist-areas.gs) | **Standalone** project `quantified-self-sync` (same) | Life-area map and pure `areaOf()`; writes nothing, read by four tabs |
+| [todoist-bill-cycle.gs](todoist/todoist-bill-cycle.gs) | **Standalone** project `quantified-self-sync` (same) | BillCycle tab (one row per bill per cycle) + the morning bill-risk check |
+| [todoist-area-daily.gs](todoist/todoist-area-daily.gs) | **Standalone** project `quantified-self-sync` (same) | AreaDaily area × day rollup |
+| [todoist-task-daily.gs](todoist/todoist-task-daily.gs) | **Standalone** project `quantified-self-sync` (same) | TaskDaily card × day snapshot — observed only, no backfill |
 | [todoist-habit-daily.gs](todoist/todoist-habit-daily.gs) | **Standalone** project `quantified-self-sync` (same) | HabitDaily grid, rebuilt from the other tabs + one-time history synthesis |
 | [todoist-reschedule-habits.gs](todoist/todoist-reschedule-habits.gs) | **Standalone** project `quantified-self-sync` (same) | Manual — bumps skipped habits forward. The only path that writes back to Todoist |
 | [everhour-sync.gs](everhour-sync.gs) | **Standalone** project `quantified-self-sync` (same) | Nightly pull from Everhour API |
@@ -59,11 +63,15 @@ All files in the `quantified-self-sync` standalone project share the same Script
 1. Create both sheets with tabs and headers from their schema files
 2. In Google Apps Script console ([script.google.com](https://script.google.com)):
    - Create a **new standalone project** named `quantified-self-sync`
-   - Add the **six files** from [`todoist/`](todoist/) (organized by concern):
+   - Add the **ten files** from [`todoist/`](todoist/) (organized by concern):
      - `todoist-sync.gs` — main orchestrator, Overdue/Karma/Recurring syncs, diagnostics
      - `todoist-sync-utils.gs` — HTTP helpers, caching, utility functions (shared)
      - `todoist-sync-completions.gs` — completion sync logic, activity event normalization, complexity extraction
      - `todoist-sync-sections.gs` — section movement tracking ("In Review" for Ascensus/Work)
+     - `todoist-areas.gs` — the life-area map; writes nothing but four tabs depend on it
+     - `todoist-bill-cycle.gs` — the BillCycle tab + `checkBillRisk()`
+     - `todoist-area-daily.gs` — the AreaDaily rollup
+     - `todoist-task-daily.gs` — the TaskDaily snapshot
      - `todoist-habit-daily.gs` — the HabitDaily grid, derived from the tabs above
      - `todoist-reschedule-habits.gs` — manual habit reschedule (writes back to Todoist)
    - Add `everhour-sync.gs` for Everhour integration

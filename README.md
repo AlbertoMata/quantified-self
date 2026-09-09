@@ -84,19 +84,27 @@ quantified-self/
 │   ├── health-webhook.gs        # Webhook for Health Sync shortcut → Health sheet
 │   ├── everhour-sync.gs         # Nightly Everhour pull (same GAS project)
 │   └── todoist/
-│       ├── README.md                      # Index: 5 tabs, script map, Script Properties
+│       ├── README.md                      # Index: 8 tabs, script map, Script Properties
 │       ├── schema/                        # One doc per sheet tab
 │       │   ├── completions.md
 │       │   ├── overdue.md
 │       │   ├── karma-stats.md
 │       │   ├── recurring-status.md
-│       │   └── habit-daily.md
+│       │   ├── habit-daily.md
+│       │   ├── bill-cycle.md
+│       │   ├── area-daily.md
+│       │   └── task-daily.md
 │       ├── habits-contract.md             # habits/sub-habits labels, adding a step
+│       ├── area-contract.md               # area-* labels, the project tree, what makes a bill
 │       ├── history.md                     # Dated caveats for reading old rows
 │       ├── todoist-sync.gs                # Orchestrator: nightly pull + Overdue/Karma/RecurringStatus
-│       ├── todoist-sync-completions.gs    # Completions tab (one-off + recurring + In Review)
+│       ├── todoist-sync-completions.gs    # Completions tab + area backfills + due-date repair
 │       ├── todoist-sync-sections.gs       # "In Review" snapshot source
 │       ├── todoist-sync-utils.gs          # Shared HTTP, caching, cursor state
+│       ├── todoist-areas.gs               # Life-area map: areaOf(), project tree, diagnoseAreas()
+│       ├── todoist-bill-cycle.gs          # BillCycle tab + morning bill-risk check
+│       ├── todoist-area-daily.gs          # AreaDaily area × day rollup
+│       ├── todoist-task-daily.gs          # TaskDaily card × day snapshot
 │       ├── todoist-habit-daily.gs         # HabitDaily grid + one-time history synthesis
 │       └── todoist-reschedule-habits.gs   # Manual: bump skipped habits (writes back)
 ├── analytics/
@@ -133,10 +141,12 @@ quantified-self/
 
 1. Create `quantified-self-todoist` and `quantified-self-everhour` in Google Sheets
 2. Create a standalone Apps Script project named `quantified-self-sync`
-3. Paste the six `sheets/todoist/*.gs` files and `sheets/everhour-sync.gs` into the project
+3. Paste the ten `sheets/todoist/*.gs` files and `sheets/everhour-sync.gs` into the project
 4. Set Script Properties: `TODOIST_TOKEN`, `EVERHOUR_API_KEY`, and both spreadsheet IDs
 5. Set time-based triggers: `syncTodoist` at 23:30, `syncTodoistIntraday` hourly (it
-   self-limits to 07:00–23:00, keeping today's habit grid current), `syncEverhour` at 23:45
+   self-limits to 07:00–23:00, keeping today's habit grid current), `syncEverhour` at 23:45,
+   and `checkBillRisk` each morning (~08:00 — a 23:30 warning about a bill due that day is
+   useless)
 6. Add both sheets as data sources in Looker Studio
 
 ### Phase 1.5 — Obsidian integration

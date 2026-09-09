@@ -184,6 +184,22 @@ Assign in this order and never cycle it:
 | 3 | Work Day | `#b7aafe` | 8.04:1 |
 | 4 | Daily Reminders | `#a1c580` | 8.53:1 |
 
+### These four slots now carry a second meaning
+
+The same slots 1–4 are reused for the four **life areas** (`work`, `bills-taxes`, `errands`,
+`habits`) on the Bills, Errands, Work and Areas pages — see
+[`../docs/plans/life-areas.md`](../docs/plans/life-areas.md).
+
+That is acceptable only because the two vocabularies never co-occur in a single chart: the
+standing rule is that a chart is coloured by section *or* by status, never both, and no page
+plots habit sections beside life areas. The cost is real though — a reader moving between
+pages sees the same colour mean two different things, so **label the legend explicitly on
+every area chart** rather than relying on colour memory.
+
+**Do not extend the ramp to a fifth slot.** The cap comes from the measured CVD separations
+below, not from taste. Four areas fit exactly; a fifth would need the whole ramp re-derived.
+
+
 Worst adjacent pair CVD ΔE **12.2** / 20.3 normal. The order is doing that work:
 slots 2 and 4 (apricot and sage) measure only 5.7 against each other, so the
 order deliberately keeps them apart. **Slots 1–3 also clear all-pairs** (CVD 8.7),

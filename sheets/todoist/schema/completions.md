@@ -7,7 +7,7 @@ done.
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `Completions` |
 | **Written by** | `syncCompletions()` in [`../todoist-sync-completions.gs`](../todoist-sync-completions.gs) |
-| **Strategy** | Incremental append — only completions since the last sync cursor are fetched |
+| **Strategy** | Incremental append — only completions since the last sync cursor are fetched. `backfillCompletions()` extends history backwards in ≤90-day windows; `backfillCompletionAreas()` fills cols O–P on pre-existing rows |
 | **Dedup key** | `task_id\|completed_at` for sources 1–2; an entered-since-last-run snapshot diff for source 3 |
 
 ---
@@ -61,11 +61,32 @@ without a fragile cross-endpoint `task_id` join.
 | L | `sync_date` | YYYY-MM-DD | `2026-05-23` | Date the sync script ran |
 | M | `parent_id` | string | `8284123456` | Todoist parent task ID; empty for top-level tasks. Self-blend on `parent_id ↔ task_id` to attach parent details |
 | N | `complexity` | integer | `5` | Story points/complexity: derived from the first numeric-only label (see col G); empty if none. Recurring tasks rarely have one, so this is mostly populated for dev/work tasks |
+| O | `area` | string | `bills-taxes` | Life area: `work`, `bills-taxes`, `errands`, `habits`, or `uncategorized`. Resolved by `areaOf()` in [`../todoist-areas.gs`](../todoist-areas.gs) |
+| P | `area_source` | string | `parent` | How col O was decided: `label` (declared on the task) · `project` (an explicit override — Week/Habits/Inbox) · `parent` (derived from the project tree) · `default` (nothing matched → `uncategorized`). **Filter on this before averaging** — see below |
+| Q | `was_overdue` | boolean | `TRUE` | Todoist's own verdict on whether the cycle closed late, from the activity event's `extra_data.was_overdue`. **Blank means unknown, not on-time** — only recurring activity events carry it |
 
 **Header row:**
 ```
-completed_at	task_id	task_content	project_id	project_name	section_name	labels	priority	is_recurring	due_date	duration_minutes	sync_date	parent_id	complexity
+completed_at	task_id	task_content	project_id	project_name	section_name	labels	priority	is_recurring	due_date	duration_minutes	sync_date	parent_id	complexity	area	area_source	was_overdue
 ```
+
+Columns A–N are read **positionally** by other tabs. O–Q were appended for that reason;
+never reorder or insert. `ensureCompletionsAreaColumns()` names O–Q on first run and
+refuses to overwrite them if they already hold something else.
+
+### Reading `area` honestly
+
+`area` is **fully retroactive** — every row has carried `project_id` since the tab was
+created, so history re-derives with no API call. `labels` (col G) is **frozen at capture**,
+so a row from last March cannot learn about a label added today.
+
+The practical consequence: historical rows resolve through the project tree and read
+`area_source = parent`, while rows written after the area rollout mostly read `label`. Both
+are correct; they are not the same claim. A chart that mixes declared and derived rows
+without saying so is asserting more confidence than the data has.
+
+`was_overdue` measures **did the cycle close late**, not **did money move late** — see
+[`../area-contract.md`](../area-contract.md#scoring-a-bill-use-was_overdue-never-completed_at).
 
 > **Historical caveat**: col J carries split semantics either side of the 2026-08-10
 > `completed_due_date` fix — see [history.md](../history.md#2026-08-10--completed_due_date-fix-in-completions).
