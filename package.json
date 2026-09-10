@@ -1,20 +1,20 @@
 {
   "name": "quantified-self",
   "version": "1.0.0",
-  "description": "Personal daily event and habit tracker with minimal interaction — built around Apple Watch, AirPods, Apple Shortcuts, Todoist, and Everhour. Centralized view in Obsidian.",
+  "description": "Personal daily event and habit tracker with minimal interaction — built around Apple Watch, AirPods, Apple Shortcuts and Todoist. Centralized view in Obsidian.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "workspaces": [
-    "sheets/ts"
+    "todoist/ts"
   ],
   "scripts": {
     "format": "npm run format:gs && npm run format:ts",
     "format:gs": "prettier --write --parser babel \"**/*.gs\"",
-    "format:ts": "prettier --write --no-error-on-unmatched-pattern \"sheets/ts/**/*.ts\"",
-    "typecheck": "npm --workspace sheets/ts run typecheck",
-    "test": "npm --workspace sheets/ts test"
+    "format:ts": "prettier --write --no-error-on-unmatched-pattern \"ts/**/*.ts\"",
+    "typecheck": "npm --workspace todoist/ts run typecheck",
+    "test": "npm --workspace todoist/ts test"
   },
   "repository": {
     "type": "git",

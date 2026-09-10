@@ -1,10 +1,15 @@
 # Architecture Diagrams
 
+Index of what writes what: [sheets.md](sheets.md). The migration off Apps Script is planned in
+[plans/typescript-port.md](plans/typescript-port.md).
+
 ---
 
 ## 1. System Architecture
 
-End-to-end view of all data sources, sync layers, storage, and analytics.
+End-to-end view of all data sources, sync layers, storage, and analytics. Dashed nodes are not
+live — Everhour is retired and TrackingTime is not built. Both are covered in
+[`../trackingtime/`](../trackingtime/README.md).
 
 ```mermaid
 flowchart TD
@@ -12,20 +17,21 @@ flowchart TD
         SC["Apple Shortcuts\nMood · Focus · Events"]
         AW["Apple Health / Watch\nHealth Sync shortcut"]
         TD["Todoist\nAPI v1"]
-        EH["Everhour\nREST API"]
+        TT["TrackingTime\nnot built"]
+        EH["Everhour\nretired"]
     end
 
     subgraph Sync["Sync Layer"]
-        WH["Apps Script Webhook\napps-script.gs\n(push — always on)"]
-        HW["Apps Script Webhook\nhealth-webhook.gs\n(push — nightly 23:55)"]
-        GAS["Apps Script Sync\ntodoist-sync.gs\neverhour-sync.gs\n(nightly trigger)"]
+        WH["Apps Script Webhook\nevent-log/apps-script.gs\n(push — always on)"]
+        HW["Apps Script Webhook\nhealth — code deleted,\npending rework"]
+        GAS["Apps Script Sync\ntodoist/*.gs — 10 files\n(nightly 23:30 + hourly 07:00–23:00)"]
     end
 
     subgraph Storage["Google Sheets Storage"]
         SL[("quantified-self-log\nLog")]
         SH[("quantified-self-health\nHealth")]
-        ST[("quantified-self-todoist\nCompletions · Overdue · KarmaStats\nRecurringStatus · HabitDaily")]
-        SE[("quantified-self-everhour\nTimeEntries · DailySummary")]
+        ST[("quantified-self-todoist\nCompletions · Overdue · KarmaStats\nRecurringStatus · HabitDaily\nBillCycle · AreaDaily · TaskDaily")]
+        SE[("quantified-self-everhour\nTimeEntries · DailySummary\nhistorical — no longer written")]
     end
 
     subgraph Analytics["Analytics & Centralized View"]
@@ -35,18 +41,21 @@ flowchart TD
 
     SC -->|POST JSON| WH --> SL
     AW -->|nightly POST JSON| HW --> SH
-    GAS -->|pull & upsert| TD
-    GAS -->|pull & upsert| EH
+    GAS -->|pull| TD
     GAS --> ST
-    GAS --> SE
+    TT -.->|future| Sync
+    EH -.-> SE
 
     SL --> LS
     SH --> LS
     ST --> LS
-    SE --> LS
+    SE -.->|frozen| LS
 
     LS -->|iframe embed| OB
     GAS -->|morning Shortcut\nwrites markdown| OB
+
+    classDef inactive stroke-dasharray:5 5,opacity:0.6
+    class TT,EH,SE,HW inactive
 ```
 
 ---
@@ -74,19 +83,20 @@ sequenceDiagram
 
 ---
 
-## 3. Todoist / Everhour Nightly Pull Pipeline
+## 3. Todoist Pull Pipeline
 
-How external productivity data is fetched and stored each night.
+How Todoist data is fetched and stored. `syncTodoist()` runs the eight steps in isolation and
+aggregates failures, so one dead endpoint cannot abort the rest.
 
 ```mermaid
 sequenceDiagram
-    participant TR as Time Trigger (23:30 / 23:45)
+    participant TR as Time Trigger (23:30 nightly, hourly 07:00–23:00)
     participant GAS as Apps Script Sync
-    participant SP as Script Properties (token store)
-    participant API as External API (Todoist / Everhour)
-    participant SH as Target Sheet
+    participant SP as Script Properties (token + cursor)
+    participant API as Todoist API v1
+    participant SH as quantified-self-todoist
 
-    TR->>GAS: syncTodoist() / syncEverhour()
+    TR->>GAS: syncTodoist() / syncTodoistIntraday()
     GAS->>SP: Read API token + last sync timestamp
     GAS->>API: GET /tasks/completed/by_completion_date + /activities (paginated, since lastSync)
     API-->>GAS: Completed tasks + recurring check-off events
@@ -94,9 +104,18 @@ sequenceDiagram
     GAS->>GAS: Drop already-seen task_id + completed_at pairs
     GAS->>SH: appendRows(new completions)
     GAS->>SP: Write new lastSync timestamp
-    GAS->>SH: Replace Overdue and RecurringStatus snapshots · upsert KarmaStats / DailySummary
-    GAS->>SH: Rebuild HabitDaily grid from Completions + RecurringStatus (sheet-to-sheet)
+    GAS->>SH: Replace today's Overdue · RecurringStatus · AreaDaily · TaskDaily snapshots
+    GAS->>SH: Upsert KarmaStats · rebuild BillCycle
+    GAS->>SH: Rebuild HabitDaily from Completions + RecurringStatus (sheet-to-sheet, runs last)
 ```
+
+**Ordering is load-bearing.** `HabitDaily` is derived from two other tabs and must run last;
+`BillCycle` and `AreaDaily` read `Completions` and so must follow it. `TaskDaily` and
+`AreaDaily`'s snapshot columns are *observed only* — a missed day is a permanent hole no re-run
+can fill.
+
+A separate morning trigger runs `checkBillRisk()` around 08:00: a 23:30 warning about a bill due
+that same day is useless.
 
 ---
 
@@ -113,10 +132,14 @@ sequenceDiagram
     participant OB as Obsidian Daily Note
 
     AL->>SC: Alarm dismissed trigger
-    SC->>GS: Read DailySummary, KarmaStats, Log (yesterday)
+    SC->>GS: Read KarmaStats, HabitDaily, Log (yesterday)
     GS-->>SC: JSON with metrics
-    SC->>SC: Format markdown snippet\n(mood avg, sleep, habits, hours worked)
+    SC->>SC: Format markdown snippet\n(mood avg, sleep, habits, karma)
     SC->>MF: Write/append to YYYY-MM-DD.md in vault
     OB->>MF: Reads file (vault is iCloud-synced)
     Note over OB: Templater fills template\nLooker Studio embedded via Custom Frames
 ```
+
+The morning summary previously read `DailySummary` for hours worked. That tab is no longer
+written — see [`../shortcuts/morning-summary.md`](../event-log/shortcuts/morning-summary.md), which needs
+the same correction once a time tracker is back in place.

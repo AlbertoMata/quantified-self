@@ -55,7 +55,7 @@ Your Obsidian daily note template (see `daily-note-template.md`) includes a plac
 
 - Obsidian vault stored in **iCloud Drive** (default for iOS Obsidian app)
 - Community plugins: **Templater** + **Periodic Notes**
-- Apple Shortcuts app with the `Morning Summary` shortcut (see `shortcuts/morning-summary.md`)
+- Apple Shortcuts app with the `Morning Summary` shortcut (see `event-log/shortcuts/morning-summary.md`)
 
 ### Setup
 
@@ -82,7 +82,7 @@ Copy the contents of `obsidian/daily-note-template.md` from this repo into your 
 
 #### 4. Set up the Morning Summary Shortcut
 
-See `shortcuts/morning-summary.md` for the full Shortcut steps. In summary:
+See `event-log/shortcuts/morning-summary.md` for the full Shortcut steps. In summary:
 - Triggered by: alarm dismissed (Personal Automation)
 - Reads: Google Sheets API for yesterday's metrics
 - Writes: a markdown file to `iCloud Drive/Obsidian/<vault-name>/_qs-summary.md`
@@ -105,4 +105,4 @@ obsidian/
 └── daily-note-template.md     ← Templater template to copy into your vault
 ```
 
-The Shortcut that writes the metrics is documented in `shortcuts/morning-summary.md`.
+The Shortcut that writes the metrics is documented in `event-log/shortcuts/morning-summary.md`.

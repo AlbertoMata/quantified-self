@@ -1,12 +1,12 @@
 # Todoist Sync — Architecture
 
-Structural reference for the ten scripts in [`sheets/todoist/`](../../sheets/todoist/).
+Structural reference for the ten scripts in [`todoist/`](../../todoist/).
 Written to be read by someone porting this functionality to another language or
 framework: what the modules are, what they talk to, what state they keep, and which
 behaviours are load-bearing rather than incidental.
 
 Column-level detail — and the per-tab data semantics a port must reproduce — lives in the
-schema docs indexed by [`sheets/todoist/README.md`](../../sheets/todoist/README.md) and is
+schema docs indexed by [`todoist/README.md`](../../todoist/README.md) and is
 not repeated here.
 
 ---
@@ -125,7 +125,7 @@ Entry points and core logic only; helpers are omitted.
 
 | Function | Role |
 | --- | --- |
-| `fetchSectionMovementCompletions()` | Source 3. Returns every task currently sitting in an "In Review" section of a target project, shaped like a completion event. A **state snapshot**, not an event stream — see [`schema/completions.md`](../../sheets/todoist/schema/completions.md#in-review). |
+| `fetchSectionMovementCompletions()` | Source 3. Returns every task currently sitting in an "In Review" section of a target project, shaped like a completion event. A **state snapshot**, not an event stream — see [`schema/completions.md`](../../todoist/schema/completions.md#in-review). |
 
 ### `todoist-areas.gs` — the life-area map
 
@@ -289,18 +289,18 @@ Only the two cross-cutting cases, belonging to no single tab, remain in this sec
 
 | Tab | Edge cases documented in |
 | --- | --- |
-| `Completions` (including the In Review source) | [`schema/completions.md`](../../sheets/todoist/schema/completions.md#behaviour-and-edge-cases) |
-| `Overdue` | [`schema/overdue.md`](../../sheets/todoist/schema/overdue.md#behaviour-and-edge-cases) |
-| `KarmaStats` | [`schema/karma-stats.md`](../../sheets/todoist/schema/karma-stats.md) |
-| `RecurringStatus` | [`schema/recurring-status.md`](../../sheets/todoist/schema/recurring-status.md#behaviour-and-edge-cases) |
-| `HabitDaily` | [`schema/habit-daily.md`](../../sheets/todoist/schema/habit-daily.md#behaviour-and-edge-cases) |
+| `Completions` (including the In Review source) | [`schema/completions.md`](../../todoist/schema/completions.md#behaviour-and-edge-cases) |
+| `Overdue` | [`schema/overdue.md`](../../todoist/schema/overdue.md#behaviour-and-edge-cases) |
+| `KarmaStats` | [`schema/karma-stats.md`](../../todoist/schema/karma-stats.md) |
+| `RecurringStatus` | [`schema/recurring-status.md`](../../todoist/schema/recurring-status.md#behaviour-and-edge-cases) |
+| `HabitDaily` | [`schema/habit-daily.md`](../../todoist/schema/habit-daily.md#behaviour-and-edge-cases) |
 
 Two more cross-cutting documents a port must read alongside them:
 
-- [`history.md`](../../sheets/todoist/history.md) — the dated seams in the stored data
+- [`history.md`](../../todoist/history.md) — the dated seams in the stored data
   (2026-08-10 spine start and `completed_due_date` fix; 2026-08-20 UTC→local stamps and the
   recurrence migration). Timezone handling is the one in §6 that produces them.
-- [`habits-contract.md`](../../sheets/todoist/habits-contract.md) — the `habits` /
+- [`habits-contract.md`](../../todoist/habits-contract.md) — the `habits` /
   `sub-habits` label taxonomy, applied at capture time rather than derived in code.
 
 ---

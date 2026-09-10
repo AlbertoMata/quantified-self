@@ -3,8 +3,8 @@
 **Status** (2026-09-06): **Parts 1 and 2 implemented** — `due_time` and `streak` columns,
 the streak thread with window seeding, and the hourly `syncTodoistIntraday()` entry point
 are in the scripts and covered by the harness; the Looker Studio build recipe is in
-[`../../analytics/habits-page.md`](../../analytics/habits-page.md), linked from
-`analytics/README.md`. **Section 1 (Today) is now built in Looker** — page *Performance*,
+[`../../todoist/looker/habits-page.md`](../../todoist/looker/habits-page.md), linked from
+`todoist/looker/README.md`. **Section 1 (Today) is now built in Looker** — page *Performance*,
 with the daily gauge, the Done / Due, Owed Today, Still Open and Remaining to Target cards,
 and the Pending table; Sections 2 (This week) and 3 (This month) are still to build.
 **Part 3 is not built**: the `optional` labels in Todoist are still to do (someone has to
@@ -22,7 +22,7 @@ over the week and month (what got done, streaks, rates). Some habits are optiona
 second cup of coffee — and must be filterable out of the numbers.
 
 `HabitDaily` already scores every habit-day as `done` / `pending` / `missed` / `not_due`
-(see [`../../sheets/todoist/schema/habit-daily.md`](../../sheets/todoist/schema/habit-daily.md)),
+(see [`../../todoist/schema/habit-daily.md`](../../todoist/schema/habit-daily.md)),
 which is what makes a real tracker possible. Two data gaps still block it: there is no
 `streak` column (Looker Studio cannot compute a running count), and no time-of-day to
 order today's list by — the recurrence string carries it (`every workday at 09:10 am`) but
@@ -37,7 +37,7 @@ Looker cannot sort on that.
 | Streaks | Computed in the sheet, stored per row | Looker Studio has no running-total over a dimension; a `streak` column makes "current" and "best" trivial scorecards |
 | Target | A Looker **parameter**, default 80% | Gauges and reference lines adjust from the report without touching data. A fixed 100% would paint the month red for a normal month |
 
-## Part 1 — Data changes (`sheets/todoist/`)
+## Part 1 — Data changes (`todoist/`)
 
 ### `todoist-habit-daily.gs` — two new columns: `due_time` (O) and `streak` (P)
 
@@ -75,19 +75,19 @@ Looker cannot sort on that.
 
 ### Docs to update alongside
 
-- `sheets/todoist/schema/habit-daily.md`: HabitDaily table → 16 columns (`due_time`, `streak`
+- `todoist/schema/habit-daily.md`: HabitDaily table → 16 columns (`due_time`, `streak`
   with the rule and the "pending carries" note); intraday schedule paragraph; "after a
   layout change, re-run `synthesizeHabitDailyHistory()`" note.
 - `docs/todoist/architecture.md`: schedule (hourly + nightly), `syncTodoistIntraday` in the
   orchestrator table, `dueTimeOf`/`nextStreak` where `habitDayStatus` is listed, and §7
   rows: *streak seeding across the window*, *synthesizer re-threads streaks*, *layout
   change drops the synthetic block*, *intraday reruns*.
-- `README.md`: setup step 5 gains the hourly trigger; tree gains `analytics/habits-page.md`.
+- `README.md`: setup step 5 gains the hourly trigger; tree gains `todoist/looker/habits-page.md`.
 
-## Part 2 — Looker Studio recipe (`analytics/habits-page.md`, new)
+## Part 2 — Looker Studio recipe (`todoist/looker/habits-page.md`, new)
 
 Looker has no code to commit, so the deliverable is a build recipe precise enough to follow
-click-by-click. `analytics/README.md` gets the two missing data sources
+click-by-click. `todoist/looker/README.md` gets the two missing data sources
 (`QS - HabitDaily`, `QS - RecurringStatus`) and a link to the recipe. Set the
 `QS - HabitDaily` source **data freshness to 15 minutes**.
 
@@ -160,10 +160,10 @@ change is needed; synthetic rows carry the habit's *current* labels.
 
 ## Files
 
-- Modify: `sheets/todoist/todoist-habit-daily.gs`, `sheets/todoist/todoist-sync.gs`,
-  `sheets/todoist/schema/habit-daily.md`, `docs/todoist/architecture.md`, `analytics/README.md`,
+- Modify: `todoist/todoist-habit-daily.gs`, `todoist/todoist-sync.gs`,
+  `todoist/schema/habit-daily.md`, `docs/todoist/architecture.md`, `todoist/looker/README.md`,
   `README.md`
-- Create: `analytics/habits-page.md`
+- Create: `todoist/looker/habits-page.md`
 - Test harness (scratchpad, not in the repo): `hd-harness.js`
 
 Reuse: `habitDayStatus`, `isRestDay`, `dateKey`, `localDateString`, `addDays`,

@@ -1,5 +1,5 @@
-# Regenerable shortcut output (run shortcuts/generate-log-event.py to recreate)
-shortcuts/generated/
+# Regenerable shortcut output (run event-log/shortcuts/generate-log-event.py to recreate)
+event-log/shortcuts/generated/
 
 # macOS
 .DS_Store

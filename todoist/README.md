@@ -1,0 +1,92 @@
+# Todoist → Sheets
+
+Google Sheet name: `quantified-self-todoist`  
+Populated by: the standalone Apps Script project in this directory — entry point `syncTodoist()` in [`todoist-sync.gs`](todoist-sync.gs) (nightly trigger at 23:30, plus `syncTodoistIntraday()` hourly between 07:00 and 23:00, plus `checkBillRisk()` each morning)
+
+Eight tabs, each capturing a different shape of Todoist data. `Completions`, `Overdue`, `KarmaStats` and `RecurringStatus` are fetched from the API; `HabitDaily` and `BillCycle` are derived from other tabs; `AreaDaily` and `TaskDaily` are daily snapshots that accrue forward.
+
+---
+
+## Tabs
+
+| Tab | What it holds | Shape | Strategy | Schema |
+| --- | --- | --- | --- | --- |
+| `Completions` | One row per completed task, one-off and recurring | Event log | Incremental append | [schema/completions.md](schema/completions.md) |
+| `Overdue` | Tasks due but not completed | Daily snapshot | Replace today's rows | [schema/overdue.md](schema/overdue.md) |
+| `KarmaStats` | Todoist's own productivity metrics | One row per day | Upsert by `date` | [schema/karma-stats.md](schema/karma-stats.md) |
+| `RecurringStatus` | Every active recurring task and its due date | Nightly snapshot | Replace today's rows, then append | [schema/recurring-status.md](schema/recurring-status.md) |
+| `HabitDaily` | Dense habit × day grid, including skipped days | Derived from the two above | Windowed rebuild | [schema/habit-daily.md](schema/habit-daily.md) |
+| `BillCycle` | One row per bill per **cycle**, with on-time status | Derived from `Completions` + live tasks | Full rebuild | [schema/bill-cycle.md](schema/bill-cycle.md) |
+| `AreaDaily` | Dense area × day counts | Snapshot + derived | Replace today, then append | [schema/area-daily.md](schema/area-daily.md) |
+| `TaskDaily` | One row per open task per day, with aging | **Observed only** | Replace today, then append | [schema/task-daily.md](schema/task-daily.md) |
+
+**Two tabs cannot be backfilled**, and it is worth knowing which before building on them:
+`TaskDaily` is observed-only (Todoist keeps no history of what was open on a past day), and
+`AreaDaily`'s snapshot columns are too — only its `completed` column reaches backwards. Both
+mark this in their own schema docs, and `AreaDaily` carries a `counts_observed` flag for it.
+
+`RecurringStatus` is the **spine** of `HabitDaily` — the only tab that records a habit's
+existence on days nothing happened — and `Completions` is the **truth** about whether it
+was checked off. That is why `HabitDaily` runs last in `syncTodoist()`.
+
+---
+
+## Also in this directory
+
+| Doc | What it answers |
+| --- | --- |
+| [habits-contract.md](habits-contract.md) | How a habit is authored in Todoist: the `habits` / `sub-habits` labels, how to add a step, what counts as a tracked habit |
+| [area-contract.md](area-contract.md) | How a task gets its life area: the `area-*` labels, the project tree, what makes a bill, and why `deadline` is a fossil |
+| [history.md](history.md) | Dated timeline of changes that affect how old rows read — the 2026-08-10 spine start, the 2026-08-20 date-stamp fix and recurrence migration |
+| [`../../docs/todoist/architecture.md`](../docs/todoist/architecture.md) | Script structure: module map, shared utility layer, external API contract, porting notes |
+| [`../../todoist/looker/todoist-blends.md`](looker/todoist-blends.md) | Looker Studio recipes built on these tabs |
+| [`../../todoist/looker/habits-page.md`](looker/habits-page.md) | The full Looker build recipe for the Habits page, built on `HabitDaily` |
+
+---
+
+## Scripts
+
+All ten `.gs` files are **one** Apps Script project (`quantified-self-sync`), sharing a flat
+global scope — see [architecture §1](../docs/todoist/architecture.md#1-runtime-model).
+
+| File | Writes |
+| --- | --- |
+| [todoist-sync.gs](todoist-sync.gs) | Orchestrator; `Overdue`, `KarmaStats`, `RecurringStatus` |
+| [todoist-sync-completions.gs](todoist-sync-completions.gs) | `Completions` |
+| [todoist-sync-sections.gs](todoist-sync-sections.gs) | The "In Review" source feeding `Completions` |
+| [todoist-habit-daily.gs](todoist-habit-daily.gs) | `HabitDaily` |
+| [todoist-areas.gs](todoist-areas.gs) | Nothing — the area map and `areaOf()`, read by four tabs |
+| [todoist-bill-cycle.gs](todoist-bill-cycle.gs) | `BillCycle`; also `checkBillRisk()` |
+| [todoist-area-daily.gs](todoist-area-daily.gs) | `AreaDaily` |
+| [todoist-task-daily.gs](todoist-task-daily.gs) | `TaskDaily` |
+| [todoist-sync-utils.gs](todoist-sync-utils.gs) | Nothing — shared HTTP, caching, cursor state |
+| [todoist-reschedule-habits.gs](todoist-reschedule-habits.gs) | Nothing — the only path that **writes back to Todoist**, run manually |
+
+### Manual entry points
+
+| Function | What it does |
+| --- | --- |
+| `diagnoseAreas()` | Read-only. Reports areas, the `uncategorized` worklist, stale labels, and projects no rule can resolve. **Run this first in any session** |
+| `backfillCompletionAreas()` | Fills `area` / `area_source` on pre-existing `Completions` rows. Blanks only |
+| `backfillCompletions(since)` | Extends `Completions` history back in ≤90-day windows |
+| `repairCompletionDueDates()` | **Rewrites cells.** Fixes cycle attribution on recurring rows written before 2026-08-10. Back up first |
+| `backfillAreaDaily()` | Fills `completed` for past days; leaves snapshot columns blank |
+| `pruneTaskDaily(keepDays)` | Drops old `TaskDaily` rows. Manual on purpose — those rows cannot be rebuilt |
+
+---
+
+## Script Properties required
+
+Set these in the Apps Script project (**Project Settings → Script Properties**):
+
+| Key | Value |
+|---|---|
+| `TODOIST_TOKEN` | Bearer token from [todoist.com/app/settings/integrations/developer](https://todoist.com/app/settings/integrations/developer) |
+| `TODOIST_SPREADSHEET_ID` | ID from the Google Sheets URL: `docs.google.com/spreadsheets/d/<ID>/edit` |
+
+The project also keeps runtime state in Script Properties (`TODOIST_LAST_SYNC`,
+`TODOIST_IN_REVIEW_PREV`) — see
+[architecture §5](../docs/todoist/architecture.md#5-external-contract).
+
+Full setup steps, including triggers and the first manual run, are in
+[`../README.md`](../README.md#phase-15--todoist-sync).

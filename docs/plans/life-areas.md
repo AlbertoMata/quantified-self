@@ -443,7 +443,7 @@ Each step is independently deployable and independently verifiable.
 
 ### What 3.1 and 3.2 actually shipped
 
-`sheets/todoist/todoist-areas.gs` and `sheets/todoist/area-contract.md`, both new, no existing
+`todoist/todoist-areas.gs` and `todoist/area-contract.md`, both new, no existing
 file touched. 36/36 harness assertions pass. **Four deviations from the spec above**, each
 deliberate:
 
@@ -645,7 +645,7 @@ backup.
 
 | # | Do this | Why this position |
 | --- | --- | --- |
-| 1 | Paste all **ten** `sheets/todoist/*.gs` files into `quantified-self-sync` | Four are new. The flat scope means a missing file is a runtime `ReferenceError`, not a load error |
+| 1 | Paste all **ten** `todoist/*.gs` files into `quantified-self-sync` | Four are new. The flat scope means a missing file is a runtime `ReferenceError`, not a load error |
 | 2 | Run `diagnoseAreas()` | Read-only. Confirms the ids in this document still match the account **before** anything writes |
 | 3 | **Back up the spreadsheet** (Phase 2.0) | The last moment this is cheap |
 | 4 | `backfillCompletionAreas()` | Fills `area`/`area_source` on existing rows. Blanks only, so it is safe to repeat |
@@ -665,7 +665,7 @@ history you built it to see.
 
 **You, in Looker Studio.** Each sub-phase gets its own recipe doc, precise enough to follow
 click-by-click and to rebuild from if the page is ever lost — the format
-`analytics/habits-page.md` already uses.
+`todoist/looker/habits-page.md` already uses.
 
 > **None of the four recipe docs exist yet.** An earlier draft said they would be written during
 > Phase 3; they were not, and they are not in the 3.1–3.11 step table either. Writing them is
@@ -673,7 +673,7 @@ click-by-click and to rebuild from if the page is ever lost — the format
 > each one must contain, not the recipes themselves.
 
 The three data sources are already registered in
-[`../../analytics/README.md`](../../analytics/README.md), together with the **filters that must
+[`../../todoist/looker/README.md`](../../todoist/looker/README.md), together with the **filters that must
 be applied before charting** — `counts_observed = TRUE` on `AreaDaily`'s snapshot columns,
 `section_age_seeded = FALSE` before averaging section age, and `is_exit = FALSE` for
 "what is open now". Skipping those produces charts that look plausible and are wrong.
@@ -689,7 +689,7 @@ written into both palette docs.
 
 ## 4a — Bills report *(build first)*
 
-Source: `QS - BillCycle`. Recipe: `analytics/bills-page.md`.
+Source: `QS - BillCycle`. Recipe: `todoist/looker/bills-page.md`.
 
 Bills come first because the consequences are real (late fees, credit standing), the data is
 already complete back to February, and the current state is bad enough to act on immediately.
@@ -707,7 +707,7 @@ Excluded on purpose: `deadline_date` (the fossil) and `priority` (no signal).
 ## 4b — Errands report
 
 Source: `QS - AreaDaily` filtered to `errands`, plus `QS - TaskDaily` for card detail.
-Recipe: `analytics/errands-page.md`.
+Recipe: `todoist/looker/errands-page.md`.
 
 **Errands need a different shape from bills.** A bill has a cycle and a deadline; an errand is a
 long tail of small things that quietly rot. The questions are *what has been sitting longest*
@@ -723,12 +723,12 @@ and *what could I clear today* — so this report is built on aging and quick wi
 
 ## 4c — Work report
 
-Source: `QS - TaskDaily` filtered to `work`. Recipe: `analytics/work-page.md`. Flow, WIP, aging
+Source: `QS - TaskDaily` filtered to `work`. Recipe: `todoist/looker/work-page.md`. Flow, WIP, aging
 and throughput across `Work`, `Ascensus`, `Study/Reading` and `Concentrix`, on `work_stage`.
 
 ## 4d — Areas overview
 
-Source: `QS - AreaDaily`. Recipe: `analytics/areas-page.md`. The "am I lost?" page — per-area
+Source: `QS - AreaDaily`. Recipe: `todoist/looker/areas-page.md`. The "am I lost?" page — per-area
 scorecards, an area × week completion heatmap, the `uncategorized` count as its own metric, and
 in-week alignment: is my week aimed where I said it was?
 
@@ -736,16 +736,16 @@ in-week alignment: is my week aimed where I said it was?
 
 ## Files
 
-**Created ✅** — `sheets/todoist/todoist-areas.gs` · `todoist-bill-cycle.gs` ·
-`todoist-area-daily.gs` · `todoist-task-daily.gs` · `sheets/todoist/area-contract.md` ·
+**Created ✅** — `todoist/todoist-areas.gs` · `todoist-bill-cycle.gs` ·
+`todoist-area-daily.gs` · `todoist-task-daily.gs` · `todoist/area-contract.md` ·
 `schema/bill-cycle.md` · `schema/area-daily.md` · `schema/task-daily.md`
 
-**Still to create** (Phase 4) — `analytics/bills-page.md` · `analytics/errands-page.md` ·
-`analytics/work-page.md` · `analytics/areas-page.md`
+**Still to create** (Phase 4) — `todoist/looker/bills-page.md` · `todoist/looker/errands-page.md` ·
+`todoist/looker/work-page.md` · `todoist/looker/areas-page.md`
 
 **Modified ✅** — `todoist-sync.gs` · `todoist-sync-completions.gs` · `todoist-sync-utils.gs` ·
-`schema/completions.md` · `history.md` · `sheets/todoist/README.md` · `sheets/README.md` ·
-`docs/todoist/architecture.md` · `analytics/README.md` · both palette docs · root `README.md`
+`schema/completions.md` · `history.md` · `todoist/README.md` · `docs/sheets.md` ·
+`docs/todoist/architecture.md` · `todoist/looker/README.md` · both palette docs · root `README.md`
 
 **Reused** — `todoistGetPaged`, `getProjectMap`, `splitLabels`, `hasLabel`, `dateKey`,
 `localDateString`, `localDayOf`, `nextStreak`, and `replaceHabitDailyRows`'s clear-then-append
@@ -808,7 +808,7 @@ Things that are true, deliberate, and easy to mistake for bugs later.
 | Gap | Status | Detail |
 | --- | --- | --- |
 | **Nothing is deployed** | Open | All of Phase 3 exists only in the repo. See [Deploying](#deploying) |
-| **The four Looker recipe docs do not exist** | Open — first task of Phase 4 | `analytics/{bills,errands,work,areas}-page.md`. The Phase 4 sections here are their specification |
+| **The four Looker recipe docs do not exist** | Open — first task of Phase 4 | `todoist/looker/{bills,errands,work,areas}-page.md`. The Phase 4 sections here are their specification |
 | **`todoist-sync-sections.gs` is still name-based** | Accepted, not fixed | It queries `#Ascensus \| #Work`. Verified safe — `##Work` proves `#Work` binds to the child, not `💼 Work`. It breaks only if someone creates a project whose name collides, or renames one of those two |
 | **A bill cycle that was never closed is invisible** | Accepted, documented | No completion event exists to key a row on. A deliberate undercount, per the house rule of undercounting rather than fabricating |
 | **`TaskDaily` cannot be backfilled at all** | Structural | Todoist keeps no history of what was open on a past day, and `item:updated` carries no `section_id`. Its first run seeds *every* row's section age as a floor |
@@ -819,7 +819,7 @@ Things that are true, deliberate, and easy to mistake for bugs later.
 | **Two `.gs` files are not prettier-clean** | Deliberate | `todoist-habit-daily.gs`, `todoist-reschedule-habits.gs`. Formatting them would churn ~150 untouched lines into an unrelated diff |
 | **Due *times* distort lateness** | Open — Todoist-side | `PAY THE MORTGAGE` is due at 02:00, so every waking-hour check-off is `closed_late`. Not fixed in code; auditing the other bills' due times is a worthwhile follow-up |
 | **The tab cannot measure payment timeliness** | Structural | Todoist records the tick, not the payment. Making it true would mean ticking a bill at the moment you pay it — a behaviour change, not a code change |
-| **`sheets/README.md` links to two deleted files** | Pre-existing | `schema.md` and `apps-script.gs`, removed in commit `4ab0446`. Unrelated to this plan; noted so it is not mistaken for collateral damage |
+| **`docs/sheets.md` links to two deleted files** | Pre-existing | `schema.md` and `apps-script.gs`, removed in commit `4ab0446`. Unrelated to this plan; noted so it is not mistaken for collateral damage |
 
 ## Rejected
 
