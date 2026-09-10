@@ -6,8 +6,8 @@
 // generator, so a day with no activity has no row to render unless this tab supplies one.
 //
 // SECTION-AGNOSTIC BY CONSTRUCTION. Board vocabularies differ wildly across projects
-// (`Study/Reading` has Backlog/In Progress/Quiz/Done, `Ascensus` swaps Done and Blocked,
-// and `Bills`, `Finance`, `SAT`, `Challenger` and `Purchases` have no sections at all), so
+// (`Study/Reading` has Backlog/In Progress/Quiz/Done, and `Bills`, `Finance`, `SAT`,
+// `Challenger` and `Purchases` have no sections at all), so
 // an area-level rollup cannot share one column vocabulary. It counts tasks, not columns.
 //
 // TWO KINDS OF COLUMN, and the difference is the honest part:

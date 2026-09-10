@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Todoist Sync — Section "In Review" Completions
-// Counts tasks sitting in an "In Review" section (Ascensus / Work)
+// Counts tasks sitting in an "In Review" section of a target project (Work)
 // as completion events — i.e. PR reviewed / story ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -35,7 +35,10 @@ function fetchSectionMovementCompletions(projectNames, sinceDate, until) {
 			return [];
 		}
 
-		// One filter query for all target projects: "#Ascensus | #Work".
+		// One filter query for all target projects — currently just "#Work".
+		// "#Work" binds to the child project, NOT the "💼 Work" parent that
+		// contains it — verified in ../docs/plans/life-areas.md. That mattered
+		// little with two names in the list; with one it is the whole query.
 		const query = projectNames
 			.map((name) => `#${name}`)
 			.join(" | ");

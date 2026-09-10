@@ -13,7 +13,7 @@ Companion to [habits-contract.md](habits-contract.md). How areas are then *repor
 
 | Area | Label | Holds |
 | --- | --- | --- |
-| `work` | `area-work` | Work, Study/Reading, Ascensus, Concentrix, Math, Quantified Self |
+| `work` | `area-work` | Work, Study/Reading, Concentrix, Math, Quantified Self |
 | `bills-taxes` | `area-bills-taxes` | Bills, Finance, Mortgage, Credit Cards, SAT, Purchases |
 | `errands` | `area-errands` | Challenger, Ford Focus, Home, Misc, `Inbox`, `Week` by default |
 | `habits` | `area-habits` | Habits |

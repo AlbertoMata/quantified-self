@@ -1,6 +1,6 @@
 # Apps Script → TypeScript port — design
 
-**Status** (2026-09-09): **Phase A in progress — A1, A2, A3 complete; A4 next.**
+**Status** (2026-09-09): **Phase A in progress — A1–A4 complete; A5 next.**
 The `todoist/ts/` workspace is green (`npm run typecheck`, `npm test` 6/6, Node running `.ts`
 with no build step). clasp v3.4.1 is authorised, and **both standalone projects have been
 pulled and diffed** — see [What the A3 pull found](#what-the-a3-pull-found), which corrected
@@ -19,11 +19,12 @@ Everything needed to resume is committed; nothing important lives in a scratchpa
 
 1. **Read [What the A3 pull found](#what-the-a3-pull-found)** — it corrected three facts older
    revisions of this plan stated wrongly, and a fresh session will otherwise repeat them.
-2. **A4 is next, and it is three decisions rather than code** — see the step's row. All three
-   can be answered from a phone; none needs a terminal.
-3. **`clasp` auth does not travel.** Credentials live in `~/.clasprc.json` on the machine where
-   `clasp login` ran. A5's push, and any re-pull, must happen on a machine that has them —
-   a remote or mobile session can do A4, A6's decisions, and any doc work, but not a push.
+2. **Read [A4's answers](#a4-the-three-decisions-settled)** — they are recorded intent, not
+   code changes, and one of them (`dist/` must stay paste-ready) constrains the B4 build.
+3. **A5 is next, and unlike A4 it needs a terminal.** `clasp` auth does not travel: credentials
+   live in `~/.clasprc.json` on the machine where `clasp login` ran. A5's push, and any
+   re-pull, must happen there — a remote or mobile session can do A6's decisions and any doc
+   work, but not a push.
 4. **Script IDs are deliberately not committed** (`.clasp-*.json` is gitignored). Re-find the two
    standalone ones in a single Drive query using the clasp token — that is how A3 found them:
 
@@ -95,8 +96,8 @@ No TypeScript yet. This phase ends copy-paste deployment.
 | **A1** ✅ | `todoist/ts/` workspace: `package.json`, `tsconfig.json`, `.gitignore`, `README.md`, and `src/config.ts` — the fail-closed settings reader, with tests. Root gains `workspaces`, `typecheck`/`test` delegation, a split `format:gs` / `format:ts`, and a committed lockfile | `npm run typecheck` clean, `npm test` 6/6 green — Node runs `.ts` with no build step, as designed |
 | **A2** ✅ | `@google/clasp` (v3.4.1) added, `.clasp.example.json` committed, real `.clasp-*.json` gitignored, `clasp:login` / `clasp:whoami` scripts wired | `clasp:whoami` reports the authorised account |
 | **A3** ✅ | `clasp pull` of both standalone projects into the **scratchpad** (never the working tree — pull overwrites), diffed against the repo with formatting normalised | [Report below](#what-the-a3-pull-found): 9/11 files identical, 2 differences, both understood |
-| **A4** ⏳🔶 | Manifest **captured** to `todoist/ts/appsscript/todoist.json` (the Everhour one was dropped with the integration). Remaining: [three decisions](#a4-the-three-open-decisions) | `git diff` reviewed by you, then committed by you |
-| **A5** | A `prepare-legacy` script that stages each project's `.gs` set + its manifest into `dist/<project>/`, and the two `push:*` scripts (`sync`, `log`) — health has no code to push | `npm -w todoist/ts run push:sync` round-trips: push, then a fresh pull matches |
+| **A4** ✅ | Manifest **captured** to `todoist/ts/appsscript/todoist.json` (the Everhour one was dropped with the integration), and the [three decisions](#a4-the-three-decisions-settled) settled: **both `Fullsteam` and `Ascensus` are gone from Todoist** and out of scope, `localDayOf` ships deduplicated, the manifest stays out of the source tree | All three answered. Decision 1 turned out to need a **real code change** — `TARGET_PROJECTS` is now `["Work"]` |
+| **A5** | A `prepare-legacy` script that stages each project's `.gs` set + its manifest into `dist/<project>/`, and the two `push:*` scripts (`sync`, `log`) — health has no code to push. Legacy stages **unbundled**, one file per `.gs`, so the editor stays diffable file-by-file; bundling starts at B4 | `npm -w todoist/ts run push:sync` round-trips: push, then a fresh pull matches. The push also removes the live duplicate `localDayOf` (A4 #2) |
 | **A6** 🔶 | **Verify**, not deploy — the four life-areas files are already live (A3). What remains is whether the three tabs and the Completions area columns exist, per [the documented order](life-areas.md#deploying), and correcting that doc's status | Three new tabs exist; `syncTodoist()` runs green |
 | **A7** | `CLAUDE.md`, `README.md`, `docs/sheets.md` updated: paste → `clasp push` | The setup steps no longer mention the editor |
 | **A8** 🔶 | **The test spreadsheet and the staging project** — a copy of `quantified-self-todoist` named `quantified-self-todoist-test`, plus a *separate* standalone Apps Script project bound to nothing, with its own Script Properties pointing at the copy | The copy's ID is in the staging project's properties, and the live ID appears nowhere in it |
@@ -112,21 +113,73 @@ destroy nothing — with one small exception below.
 | --- | --- |
 | **There are two standalone projects, not one** | *Quantified Self - Todoist Sync* (10 files) and *Quantified Self - Everhour Sync* (1 file, still named `Código.js`). The docs describe a single `quantified-self-sync` project holding both; that has never been true. This **settled the "one project or two?" open question** — it was already two. Since superseded: Everhour has been retired, so only the Todoist project is ported |
 | **The life-areas code is already deployed** | All four files — Areas, Area Daily, Bill Cycle, Task Daily — are live and byte-identical to the repo. [`life-areas.md`](life-areas.md) still says "Nothing is deployed / none of it has been pasted into Apps Script yet", which is **stale**. Whether the *tabs* exist is a separate question this pull cannot answer |
-| **The editor is behind in one file** ⚠️ | *Habit Daily Grid* still defines `localDayOf()`, which the repo moved into Utilities. The live project therefore defines it **twice**. Harmless today — identical bodies — but it is a real collision, and pushing the repo fixes it |
-| **The editor is ahead in one comment** | *Sync Sections* mentions `Fullsteam / Ascensus / Work`; the repo says `Ascensus / Work`. Comment-only — `TARGET_PROJECTS` is identical in both — so a push loses a stale note, not behaviour. Worth a glance before A4 in case Fullsteam was meant to be a real target |
+| **The editor is behind in one file** ⚠️ | *Habit Daily Grid* still defines `localDayOf()`, which the repo moved into Utilities. The live project therefore defines it **twice**. Harmless today — identical bodies — but it is a real collision, and pushing the repo fixes it. **A4 #2 confirmed the deduplicated version ships**, so A5's push is the fix |
+| **The editor is ahead in one comment** | *Sync Sections* mentions `Fullsteam / Ascensus / Work`; the repo says `Ascensus / Work`. Comment-only — `TARGET_PROJECTS` is identical in both — so a push loses a stale note, not behaviour. **A4 #1 settled it: Fullsteam is retired**, so the repo is right and the push discards a stale note |
 | **Manifests captured** | Both are identical and minimal: `timeZone: America/Mexico_City`, `runtimeVersion: V8`, `exceptionLogging: STACKDRIVER`. This **confirms the timezone** the whole date layer depends on, and they are the manifests A4 brings into the repo |
 | **Webhook projects not yet pulled** | Bound scripts do not appear in Drive and clasp v3 has no `list`, so their Script IDs must come from each spreadsheet's *Extensions → Apps Script → Project Settings* |
 
-#### A4: the three open decisions
+#### A4: the three decisions, settled
 
-Answerable from a phone; none needs a terminal. A5 is blocked until they are settled, because
-each one changes what gets pushed.
+All three are answered. **The repo already matched every answer**, so A4 changed no code — it
+turned three unknowns into recorded intent, which is what unblocks A5.
 
-| # | Decision | Context |
+| # | Decision | Answer | What follows |
+| --- | --- | --- | --- |
+| 1 | Is `Fullsteam` a real target project? | **No — and neither is `Ascensus`** | Both projects have been deleted from Todoist (verified against the live account: 21 projects, active *and* archived, and neither name appears). `TARGET_PROJECTS` in [`todoist-sync.gs`](../../todoist/todoist-sync.gs) is now `["Work"]`, so the In Review filter is `#Work`. This was the one A4 answer that **changed code** — see [the scope reduction](#the-in-review-scope-reduction) |
+| 2 | Does the deduplicated `localDayOf` ship? | **Yes** | The repo's single definition in [`todoist-sync-utils.gs`](../../todoist/todoist-sync-utils.gs) survives; the editor's second copy in *Habit Daily Grid* disappears on push. This makes A5 the step that **repairs a live collision**, not merely a change of deployment mechanism |
+| 3 | Where does the manifest belong? | **`todoist/ts/appsscript/`** — where it already sits | Judged against the criterion you gave: iterate and test in TS, then deploy whatever `dist/` holds. Keeping the manifest out of `src/` means no test or typecheck glob ever meets a deploy artefact, and staging it into `dist/<project>/` makes that directory the *complete* payload — everything you would push **or paste** is in one place |
+
+##### `dist/` is a paste-ready payload, not just a clasp staging directory
+
+Answer 3 carried a requirement the plan did not previously have: *"allow me to just copy and
+paste whatever is in dist"*. That is a second deploy path, and it earns its place — clasp auth
+does not travel between machines, so paste is the only way to deploy from a machine that has
+never run `clasp login`. Three consequences:
+
+- **The B4 build emits exactly one file per project.** A bundle split across several files
+  would make a manual deploy ten select-all-pastes; one file makes it one. The IIFE + generated
+  global footer already produce this shape — it is now a requirement rather than a convenience.
+- **The manifest is pasted separately, and only when it changes.** Apps Script hides
+  `appsscript.json` until *Project Settings → Show "appsscript.json" manifest file in editor*
+  is ticked. Worth ticking once per project. In practice it changes when a scope or the
+  timezone changes, which is rare.
+- **A5's legacy staging is the exception.** It stages the ten existing `.gs` files unbundled,
+  because they are pushed by clasp and diffed file-by-file against the editor. The paste path
+  matters for the *port's* output, from B4 onward.
+
+> **A one-way door worth naming.** Once the editor holds a single generated bundle, the
+> file-by-file diff that made A3 trustworthy stops working — one file on one side, ten on the
+> other. That is acceptable *after* cutover, when the repo is the source and the editor is
+> generated output, but it is precisely why A3 had to happen while the two sides were still
+> comparable. Phase E's parity check must therefore run on **tab data**, not on source diffs.
+
+##### The In Review scope reduction
+
+`Ascensus` and `Fullsteam` no longer exist in Todoist, so the In Review completion source now
+targets one project instead of two.
+
+| Changed | From | To |
 | --- | --- | --- |
-| 1 | **Is `Fullsteam` a real target project, or a stale comment?** | The live *Sync Sections* header says `Fullsteam / Ascensus / Work`; the repo says `Ascensus / Work`. `TARGET_PROJECTS = ["Ascensus", "Work"]` is identical in both, so today it is comment-only. If Fullsteam should be tracked, the **code** is wrong and needs a real change — not just the comment |
-| 2 | **Confirm the deduplicated `localDayOf` is what ships.** | The repo defines it once (Utilities); the live project defines it twice. Pushing the repo removes the duplicate. Expected answer is yes — the alternative is keeping a known collision |
-| 3 | **Does the manifest belong in `todoist/ts/appsscript/`?** | That is where it now sits, and A5 stages it into `dist/<project>/`. The alternative — `todoist/appsscript.json`, beside the `.gs` — is possible after the restructure but puts a deploy artefact in the source tree and forces a `.claspignore` to keep `.ts` files out of the push |
+| `todoist-sync.gs` | `TARGET_PROJECTS = ["Ascensus", "Work"]` | `["Work"]` |
+| The filter it builds | `#Ascensus \| #Work` | `#Work` |
+
+**No data is affected.** `Ascensus` held 0 tasks by both filter and `project_id` from before
+the life-areas reorg — [`life-areas.md`](life-areas.md) recorded that at the time — so no
+`Completions` row ever originated there and nothing needs backfilling.
+
+**The area maps needed no edit.** `AREA_BY_PARENT_ID` and `AREA_BY_PROJECT_ID` in
+[`todoist-areas.gs`](../../todoist/todoist-areas.gs) resolve by **project ID**, not by name, so
+a deleted project simply stops appearing in the tree. Every ID in those maps still matches a
+live project. This is the payoff of the ID-based design that life-areas chose deliberately —
+a name-based map would have needed hand-editing here.
+
+> ⚠️ **One risk got worse.** The In Review query is still name-based, and it is now a
+> **single-name** query. Previously a rename of `Work` cost half the source; now it costs all
+> of it, silently — the filter returns 0 tasks rather than erroring. `#Work` binds to the child
+> project and not to the `💼 Work` parent, which life-areas verified with `##Work`, so the
+> parent does not rescue it either. Converting this source to `project_id` is worth doing
+> during the port; it is logged under
+> [`life-areas.md`](life-areas.md#known-gaps-and-open-items).
 
 **Verified against clasp v3.4.1** (the earlier "check the flags" note is now settled):
 
@@ -150,7 +203,7 @@ The interfaces that make everything above them platform-free. No behaviour moves
 | **B1** | `src/ports/` — the six interfaces: `HttpTransport`, `TableStore`, `KeyValueStore`, `CacheStore`, `Clock`, `Logger` | `typecheck` passes; no implementation exists yet, by design |
 | **B2** | `src/core/write-plan.ts` — `WriteOp`, `WritePlan`, `Match`; and `src/core/row.ts` | Unit tests for the three verbs against an in-memory table |
 | **B3** | `src/adapters/gas/` — all six ports implemented over `SpreadsheetApp`, `UrlFetchApp`, `PropertiesService`, `CacheService`, `Session`, `Utilities`, `Logger` | Each adapter has a test using a fake of the GAS global |
-| **B4** | esbuild build → `dist/{sync,log}/`, manifest copied in, IIFE + generated global footer. Push scripts split into `push:staging` (default) and `push:prod` (refuses without `--confirm`) | A hello-world entry point pushes and runs in the **A8 staging project**, writing to the test copy |
+| **B4** | esbuild build → `dist/{sync,log}/`, manifest copied in, IIFE + generated global footer, **one file per project** so the output stays paste-ready ([A4 #3](#a4-the-three-decisions-settled)). Push scripts split into `push:staging` (default) and `push:prod` (refuses without `--confirm`) | A hello-world entry point pushes and runs in the **A8 staging project**, writing to the test copy. Pasting that same file by hand produces an identical project |
 | **B4b** | **The production guard** in the GAS `TableStore`: a `PROTECTED_SPREADSHEET_IDS` list, and a config that throws when no target is set rather than defaulting to anything | A test asserts a write to a protected ID throws unless `allowProductionWrites` is explicitly true |
 | **B4c** | **Dry-run mode** — the applier logs the `WritePlan` instead of applying it | Running any entry point with `dryRun: true` touches no cell and prints every op it would have performed |
 | **B5** | `src/adapters/node/` — the same six ports, stubbed to throw `NotImplemented` | The shape exists from day one so Phase F is filling in blanks, not redesigning |
@@ -236,6 +289,7 @@ finalises the day, so it must compute its own target day rather than trusting th
 | Port location | `todoist/ts/`, a self-contained **npm workspace** | Every Node/TS/clasp config lives *inside* the workspace, so the repo root stays free of them and free for a future `app/` Swift project. It sits under `todoist/` because that is what it ports — if a second integration is ever written in these layers, this is the decision to revisit |
 | Language | TypeScript, **erasable syntax only** | Node 24 runs `.ts` directly (type stripping is on by default), so tests need no build and no new dependency. The price: no `enum`, no `namespace`, no parameter properties — use `const` objects and `import type` |
 | Build | esbuild → one IIFE bundle per Apps Script project | Apps Script has no module loader. One dependency, sub-second |
+| Deploy payload | `dist/<project>/` is **paste-ready** — exactly one bundled file per project | clasp auth does not travel between machines, so a manual copy-paste must stay a practical fallback from anywhere. This is why the bundle is one file rather than several ([A4 #3](#a4-the-three-decisions-settled)) |
 | **Async is banned in shared code** | Pipelines and services are synchronous; `async` exists only in `adapters/node/` | An Apps Script trigger cannot `await`: the entry point returns before the promise settles, so a **rejected** promise never reaches the executions dashboard and a failed nightly run reports success. The current code throws deliberately so failures surface there — that must survive the port |
 | I/O shape | **Fetch → pure plan → Apply** | Makes the async ban free: the pipelines do no I/O, so they need no opinion about sync vs async, and the same code runs under both runtimes. This *is* the service/integration split — everything above `ports/` is pure, everything below is platform |
 | Write model | A `WritePlan` value with three verbs — `append`, `replaceWhere`, `upsert` | Replaces eight hand-rolled write strategies with three, and maps 1:1 onto the tab-strategy table in [`todoist/README.md`](../../todoist/README.md) — the invariant the port must not break |

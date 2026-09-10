@@ -229,9 +229,9 @@ function sectionAgeFor(priorRow, sectionName, stage, addedOn, today) {
 
 // Normalise incompatible board vocabularies onto one scale.
 //
-// `Study/Reading` runs Backlog / In Progress / Quiz / Done; `Ascensus` swaps Done and
-// Blocked; several projects have no sections at all. Without this, "how much work is in
-// review" cannot be asked across projects.
+// `Study/Reading` runs Backlog / In Progress / Quiz / Done, `Work` runs its own set, and
+// several projects have no sections at all. Without this, "how much work is in review"
+// cannot be asked across projects.
 //
 // `Quiz` folds into `review` — it is Study/Reading's verification step, the same role
 // review plays elsewhere.

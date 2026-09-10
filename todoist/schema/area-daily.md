@@ -19,9 +19,8 @@ happened. Looker has no cross join and no calendar generator, so a quiet day has
 render unless this tab supplies one.
 
 **Section-agnostic by construction.** Board vocabularies differ across projects
-(`Study/Reading` has Backlog / In Progress / **Quiz** / Done, `Ascensus` swaps Done and
-Blocked, and `Bills`, `Finance`, `SAT`, `Challenger` and `Purchases` have no sections at
-all), so an area-level rollup cannot share one column vocabulary. This tab counts tasks,
+(`Study/Reading` has Backlog / In Progress / **Quiz** / Done, and `Bills`, `Finance`, `SAT`,
+`Challenger` and `Purchases` have no sections at all), so an area-level rollup cannot share one column vocabulary. This tab counts tasks,
 never columns. Card-level detail lives in [`task-daily.md`](task-daily.md).
 
 ---

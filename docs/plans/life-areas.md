@@ -217,7 +217,8 @@ historical `Completions` row keeps resolving correctly. A rename would fork `pro
 mid-history — old rows saying one thing, new rows another — for no gain.
 
 **The check was run, and the answer is no leak.** The In Review pipeline still queries by name
-(`todoist-sync-sections.gs:39–41`, `#Ascensus | #Work`), and the worry was that Todoist's `#`
+(`todoist-sync-sections.gs`, `#Ascensus | #Work` at the time — `#Work` alone since
+2026-09-09, when `Ascensus` was removed from scope), and the worry was that Todoist's `#`
 matching might now also see `💼 Work`. It does not: `##Work`, which explicitly *includes*
 sub-projects, returns the same 9 tasks as `#Work`. Had `#Work` bound to the parent, `##Work`
 would have pulled in `Study/Reading`, `Math` and `Quantified Self`.
@@ -724,7 +725,7 @@ and *what could I clear today* — so this report is built on aging and quick wi
 ## 4c — Work report
 
 Source: `QS - TaskDaily` filtered to `work`. Recipe: `todoist/looker/work-page.md`. Flow, WIP, aging
-and throughput across `Work`, `Ascensus`, `Study/Reading` and `Concentrix`, on `work_stage`.
+and throughput across `Work`, `Study/Reading` and `Concentrix`, on `work_stage`.
 
 ## 4d — Areas overview
 
@@ -809,12 +810,12 @@ Things that are true, deliberate, and easy to mistake for bugs later.
 | --- | --- | --- |
 | **Nothing is deployed** | Open | All of Phase 3 exists only in the repo. See [Deploying](#deploying) |
 | **The four Looker recipe docs do not exist** | Open — first task of Phase 4 | `todoist/looker/{bills,errands,work,areas}-page.md`. The Phase 4 sections here are their specification |
-| **`todoist-sync-sections.gs` is still name-based** | Accepted, not fixed | It queries `#Ascensus \| #Work`. Verified safe — `##Work` proves `#Work` binds to the child, not `💼 Work`. It breaks only if someone creates a project whose name collides, or renames one of those two |
+| **`todoist-sync-sections.gs` is still name-based** | Accepted, not fixed — but riskier now | It queries `#Work`. Verified safe — `##Work` proves `#Work` binds to the child, not `💼 Work`. With `Ascensus` gone this is a **single-name query**: a rename of `Work`, or a new project colliding with that name, now takes the whole In Review source down rather than half of it |
 | **A bill cycle that was never closed is invisible** | Accepted, documented | No completion event exists to key a row on. A deliberate undercount, per the house rule of undercounting rather than fabricating |
 | **`TaskDaily` cannot be backfilled at all** | Structural | Todoist keeps no history of what was open on a past day, and `item:updated` carries no `section_id`. Its first run seeds *every* row's section age as a floor |
 | **`AreaDaily`'s snapshot columns start empty** | Structural | Only `completed` reaches backwards. `counts_observed` marks which is which |
 | **`repairCompletionDueDates()` cannot reach everything** | Structural | Todoist's activity log retains roughly 12 months. Rows older than that keep their pre-fix value and are reported as unmatched rather than blanked |
-| **`Ascensus` is empty** | Not a bug | 0 tasks by filter and by `project_id`, predating the reorg. Expect `Work` rows only from that filter |
+| **`Ascensus` was removed from scope** | Resolved 2026-09-09 | The project no longer exists in Todoist. It had held 0 tasks since before the reorg, so no `Completions` row ever came from it and nothing needed backfilling. Earlier sections of this document mention it as a live target — they are dated records, not current state |
 | **`area-habits` is applied to nothing** | Correct state | `Habits` resolves by project override. The label stays as the escape hatch for a habit-area task living outside `Habits` |
 | **Two `.gs` files are not prettier-clean** | Deliberate | `todoist-habit-daily.gs`, `todoist-reschedule-habits.gs`. Formatting them would churn ~150 untouched lines into an unrelated diff |
 | **Due *times* distort lateness** | Open — Todoist-side | `PAY THE MORTGAGE` is due at 02:00, so every waking-hour check-off is `closed_late`. Not fixed in code; auditing the other bills' due times is a worthwhile follow-up |

@@ -98,8 +98,8 @@ one, rather than wiping it the way a derived tab can be wiped.
 ## `work_stage` and the rename tripwire
 
 Board vocabularies are incompatible across projects: `Study/Reading` runs Backlog / In
-Progress / **Quiz** / Done, `Ascensus` swaps Done and Blocked, and several projects have no
-sections at all. `work_stage` maps them onto one scale so "how much is in review" can be
+Progress / **Quiz** / Done, `Work` runs its own set, and several projects have no sections
+at all. `work_stage` maps them onto one scale so "how much is in review" can be
 asked across projects. `Quiz` folds into `review` — it is Study/Reading's verification step.
 
 An unrecognised section name returns **`other`**. That is deliberate: a section renamed in

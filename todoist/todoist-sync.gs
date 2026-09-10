@@ -28,7 +28,11 @@
 const TODOIST_BASE = "https://api.todoist.com/api/v1";
 
 // ── Configuration ──────────────────────────────────────────────────────────
-const TARGET_PROJECTS = ["Ascensus", "Work"];
+// Projects whose "In Review" section counts as a completion event.
+// `Ascensus` was dropped 2026-09-09: the project no longer exists in Todoist.
+// It held 0 tasks long before that, so no historical Completions row came from
+// it and nothing needs backfilling.
+const TARGET_PROJECTS = ["Work"];
 const IN_REVIEW_SECTION_NAME = "In Review";
 const CACHE_DURATION_HOURS = 6;
 const MAX_COMPLETED_SPAN_MS = 90 * 86400000;
