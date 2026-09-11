@@ -78,7 +78,7 @@ quantified-self/
 │   └── morning-summary.md       # Morning Summary → Obsidian daily note
 ├── todoist/                     # Todoist → Sheets. The largest integration by far
 │   ├── README.md                # Index: 8 tabs, script map, Script Properties
-│   ├── *.gs                     # 10 files, one Apps Script project, one flat scope
+│   ├── legacy-implementation/   # The 10 deployed .gs — one project, one flat scope
 │   ├── schema/                  # One doc per tab — the contract, not a description
 │   ├── habits-contract.md       # habits/sub-habits labels, adding a step
 │   ├── area-contract.md         # area-* labels, the project tree, what makes a bill
@@ -122,7 +122,7 @@ quantified-self/
 
 1. Create `quantified-self-todoist` in Google Sheets
 2. Create a standalone Apps Script project (the live one is named *Quantified Self - Todoist Sync*)
-3. Paste the ten `todoist/*.gs` files into the project
+3. Push with `npm --workspace todoist/ts run push:sync` (stages `todoist/legacy-implementation/*.gs` and deploys them)
 4. Set Script Properties: `TODOIST_TOKEN` and `TODOIST_SPREADSHEET_ID`
 5. Set time-based triggers: `syncTodoist` at 23:30, `syncTodoistIntraday` hourly (it
    self-limits to 07:00–23:00, keeping today's habit grid current), and `checkBillRisk` each

@@ -5,7 +5,7 @@ One row per open task per day — the card-level companion to `AreaDaily`'s coun
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `TaskDaily` |
-| **Written by** | `syncTaskDaily()` in [`../todoist-task-daily.gs`](../todoist-task-daily.gs) |
+| **Written by** | `syncTaskDaily()` in [`../todoist-task-daily.gs`](../legacy-implementation/todoist-task-daily.gs) |
 | **Strategy** | Replace today's rows, then append |
 | **History** | **Observed only.** Accrues forward; no backfill is possible |
 
@@ -105,7 +105,7 @@ asked across projects. `Quiz` folds into `review` — it is Study/Reading's veri
 An unrecognised section name returns **`other`**. That is deliberate: a section renamed in
 Todoist shows up as a growing `other` bucket instead of silently disappearing from every
 chart. A non-zero `other` count means the map in
-[`../todoist-task-daily.gs`](../todoist-task-daily.gs) needs a new entry.
+[`../todoist-task-daily.gs`](../legacy-implementation/todoist-task-daily.gs) needs a new entry.
 
 ---
 

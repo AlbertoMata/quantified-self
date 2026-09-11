@@ -6,7 +6,7 @@ Daily snapshot of every active recurring task and its due date — the **spine**
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `RecurringStatus` |
-| **Written by** | `syncRecurringStatus()` in [`../todoist-sync.gs`](../todoist-sync.gs), from `/tasks/filter?query=recurring` |
+| **Written by** | `syncRecurringStatus()` in [`../todoist-sync.gs`](../legacy-implementation/todoist-sync.gs), from `/tasks/filter?query=recurring` |
 | **Strategy** | Replace today's rows, then append the fresh snapshot (idempotent re-runs) |
 | **Dedup key** | `snapshot_date\|task_id` |
 

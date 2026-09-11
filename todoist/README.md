@@ -1,7 +1,8 @@
 # Todoist → Sheets
 
 Google Sheet name: `quantified-self-todoist`  
-Populated by: the standalone Apps Script project in this directory — entry point `syncTodoist()` in [`todoist-sync.gs`](todoist-sync.gs) (nightly trigger at 23:30, plus `syncTodoistIntraday()` hourly between 07:00 and 23:00, plus `checkBillRisk()` each morning)
+Populated by: a standalone Apps Script project, whose code lives in
+[`legacy-implementation/`](legacy-implementation/) — entry point `syncTodoist()` in [`todoist-sync.gs`](legacy-implementation/todoist-sync.gs) (nightly trigger at 23:30, plus `syncTodoistIntraday()` hourly between 07:00 and 23:00, plus `checkBillRisk()` each morning)
 
 Eight tabs, each capturing a different shape of Todoist data. `Completions`, `Overdue`, `KarmaStats` and `RecurringStatus` are fetched from the API; `HabitDaily` and `BillCycle` are derived from other tabs; `AreaDaily` and `TaskDaily` are daily snapshots that accrue forward.
 
@@ -46,21 +47,23 @@ was checked off. That is why `HabitDaily` runs last in `syncTodoist()`.
 
 ## Scripts
 
-All ten `.gs` files are **one** Apps Script project (`quantified-self-sync`), sharing a flat
-global scope — see [architecture §1](../docs/todoist/architecture.md#1-runtime-model).
+All ten `.gs` files in [`legacy-implementation/`](legacy-implementation/) are **one** Apps
+Script project — *Quantified Self - Todoist Sync* — sharing a flat global scope. See
+[architecture §1](../docs/todoist/architecture.md#1-runtime-model). They are deployed with
+`npm --workspace todoist/ts run push:sync`, never by pasting.
 
 | File | Writes |
 | --- | --- |
-| [todoist-sync.gs](todoist-sync.gs) | Orchestrator; `Overdue`, `KarmaStats`, `RecurringStatus` |
-| [todoist-sync-completions.gs](todoist-sync-completions.gs) | `Completions` |
-| [todoist-sync-sections.gs](todoist-sync-sections.gs) | The "In Review" source feeding `Completions` |
-| [todoist-habit-daily.gs](todoist-habit-daily.gs) | `HabitDaily` |
-| [todoist-areas.gs](todoist-areas.gs) | Nothing — the area map and `areaOf()`, read by four tabs |
-| [todoist-bill-cycle.gs](todoist-bill-cycle.gs) | `BillCycle`; also `checkBillRisk()` |
-| [todoist-area-daily.gs](todoist-area-daily.gs) | `AreaDaily` |
-| [todoist-task-daily.gs](todoist-task-daily.gs) | `TaskDaily` |
-| [todoist-sync-utils.gs](todoist-sync-utils.gs) | Nothing — shared HTTP, caching, cursor state |
-| [todoist-reschedule-habits.gs](todoist-reschedule-habits.gs) | Nothing — the only path that **writes back to Todoist**, run manually |
+| [todoist-sync.gs](legacy-implementation/todoist-sync.gs) | Orchestrator; `Overdue`, `KarmaStats`, `RecurringStatus` |
+| [todoist-sync-completions.gs](legacy-implementation/todoist-sync-completions.gs) | `Completions` |
+| [todoist-sync-sections.gs](legacy-implementation/todoist-sync-sections.gs) | The "In Review" source feeding `Completions` |
+| [todoist-habit-daily.gs](legacy-implementation/todoist-habit-daily.gs) | `HabitDaily` |
+| [todoist-areas.gs](legacy-implementation/todoist-areas.gs) | Nothing — the area map and `areaOf()`, read by four tabs |
+| [todoist-bill-cycle.gs](legacy-implementation/todoist-bill-cycle.gs) | `BillCycle`; also `checkBillRisk()` |
+| [todoist-area-daily.gs](legacy-implementation/todoist-area-daily.gs) | `AreaDaily` |
+| [todoist-task-daily.gs](legacy-implementation/todoist-task-daily.gs) | `TaskDaily` |
+| [todoist-sync-utils.gs](legacy-implementation/todoist-sync-utils.gs) | Nothing — shared HTTP, caching, cursor state |
+| [todoist-reschedule-habits.gs](legacy-implementation/todoist-reschedule-habits.gs) | Nothing — the only path that **writes back to Todoist**, run manually |
 
 ### Manual entry points
 

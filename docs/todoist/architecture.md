@@ -1,6 +1,7 @@
 # Todoist Sync — Architecture
 
-Structural reference for the ten scripts in [`todoist/`](../../todoist/).
+Structural reference for the ten scripts in
+[`todoist/legacy-implementation/`](../../todoist/legacy-implementation/).
 Written to be read by someone porting this functionality to another language or
 framework: what the modules are, what they talk to, what state they keep, and which
 behaviours are load-bearing rather than incidental.

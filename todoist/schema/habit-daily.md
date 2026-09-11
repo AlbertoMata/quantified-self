@@ -6,7 +6,7 @@ per calendar day, **including the days it was skipped**.
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `HabitDaily` |
-| **Written by** | `syncHabitDaily()` / `backfillHabitDaily()` in [`../todoist-habit-daily.gs`](../todoist-habit-daily.gs) |
+| **Written by** | `syncHabitDaily()` / `backfillHabitDaily()` in [`../todoist-habit-daily.gs`](../legacy-implementation/todoist-habit-daily.gs) |
 | **Strategy** | Windowed replace — 7 days nightly, 400 on backfill |
 | **Dedup key** | `date\|task_id` |
 | **Sources** | `RecurringStatus` (spine) + `Completions` (truth) — no API calls |

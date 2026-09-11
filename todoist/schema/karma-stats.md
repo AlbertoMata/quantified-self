@@ -5,7 +5,7 @@ One row per day capturing Todoist's own productivity metrics.
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `KarmaStats` |
-| **Written by** | `syncKarmaStats()` in [`../todoist-sync.gs`](../todoist-sync.gs), from `/tasks/completed/stats` ∥ `/user/stats` (first one that answers) |
+| **Written by** | `syncKarmaStats()` in [`../todoist-sync.gs`](../legacy-implementation/todoist-sync.gs), from `/tasks/completed/stats` ∥ `/user/stats` (first one that answers) |
 | **Strategy** | Upsert in place — if the row already exists for today, update it |
 | **Dedup key** | `date` |
 

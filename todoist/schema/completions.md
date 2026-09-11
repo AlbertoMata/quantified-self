@@ -6,7 +6,7 @@ done.
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `Completions` |
-| **Written by** | `syncCompletions()` in [`../todoist-sync-completions.gs`](../todoist-sync-completions.gs) |
+| **Written by** | `syncCompletions()` in [`../todoist-sync-completions.gs`](../legacy-implementation/todoist-sync-completions.gs) |
 | **Strategy** | Incremental append — only completions since the last sync cursor are fetched. `backfillCompletions()` extends history backwards in ≤90-day windows; `backfillCompletionAreas()` fills cols O–P on pre-existing rows |
 | **Dedup key** | `task_id\|completed_at` for sources 1–2; an entered-since-last-run snapshot diff for source 3 |
 
@@ -61,7 +61,7 @@ without a fragile cross-endpoint `task_id` join.
 | L | `sync_date` | YYYY-MM-DD | `2026-05-23` | Date the sync script ran |
 | M | `parent_id` | string | `8284123456` | Todoist parent task ID; empty for top-level tasks. Self-blend on `parent_id ↔ task_id` to attach parent details |
 | N | `complexity` | integer | `5` | Story points/complexity: derived from the first numeric-only label (see col G); empty if none. Recurring tasks rarely have one, so this is mostly populated for dev/work tasks |
-| O | `area` | string | `bills-taxes` | Life area: `work`, `bills-taxes`, `errands`, `habits`, or `uncategorized`. Resolved by `areaOf()` in [`../todoist-areas.gs`](../todoist-areas.gs) |
+| O | `area` | string | `bills-taxes` | Life area: `work`, `bills-taxes`, `errands`, `habits`, or `uncategorized`. Resolved by `areaOf()` in [`../todoist-areas.gs`](../legacy-implementation/todoist-areas.gs) |
 | P | `area_source` | string | `parent` | How col O was decided: `label` (declared on the task) · `project` (an explicit override — Week/Habits/Inbox) · `parent` (derived from the project tree) · `default` (nothing matched → `uncategorized`). **Filter on this before averaging** — see below |
 | Q | `was_overdue` | boolean | `TRUE` | Todoist's own verdict on whether the cycle closed late, from the activity event's `extra_data.was_overdue`. **Blank means unknown, not on-time** — only recurring activity events carry it |
 

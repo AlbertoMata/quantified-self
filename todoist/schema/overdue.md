@@ -5,7 +5,7 @@ Daily snapshot of tasks that were due but not completed.
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `Overdue` |
-| **Written by** | `syncOverdue()` in [`../todoist-sync.gs`](../todoist-sync.gs), from `/tasks/filter?query=overdue` |
+| **Written by** | `syncOverdue()` in [`../todoist-sync.gs`](../legacy-implementation/todoist-sync.gs), from `/tasks/filter?query=overdue` |
 | **Strategy** | Full daily replace — delete all rows where `snapshot_date = today`, then write fresh |
 | **Dedup key** | `snapshot_date` |
 

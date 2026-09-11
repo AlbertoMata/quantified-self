@@ -30,7 +30,7 @@ separate standalone projects with separate scopes and separate Script Properties
 
 | Project | Binding | Contents |
 | --- | --- | --- |
-| *Quantified Self - Todoist Sync* | Standalone | The ten `todoist/*.gs` files, sharing one flat global scope |
+| *Quantified Self - Todoist Sync* | Standalone | The ten `todoist/legacy-implementation/*.gs` files, sharing one flat global scope |
 | *Quantified Self - Everhour Sync* | Standalone | One file. **Retired** — repo copy deleted, but the live trigger is still firing and needs disabling: [`trackingtime/`](../trackingtime/README.md) |
 | Log webhook | Bound to `quantified-self-log` | [`event-log/apps-script.gs`](../event-log/apps-script.gs) |
 | Health webhook | Bound to `quantified-self-health` | **Code deleted pending rework** — see [`health/`](../health/README.md) |

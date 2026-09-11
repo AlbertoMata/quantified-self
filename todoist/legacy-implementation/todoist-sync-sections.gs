@@ -37,7 +37,7 @@ function fetchSectionMovementCompletions(projectNames, sinceDate, until) {
 
 		// One filter query for all target projects — currently just "#Work".
 		// "#Work" binds to the child project, NOT the "💼 Work" parent that
-		// contains it — verified in ../docs/plans/life-areas.md. That mattered
+		// contains it — verified in ../../docs/plans/life-areas.md. That mattered
 		// little with two names in the list; with one it is the whole query.
 		const query = projectNames
 			.map((name) => `#${name}`)

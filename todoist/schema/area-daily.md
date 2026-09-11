@@ -6,7 +6,7 @@ life?" page.
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `AreaDaily` |
-| **Written by** | `syncAreaDaily()` in [`../todoist-area-daily.gs`](../todoist-area-daily.gs) |
+| **Written by** | `syncAreaDaily()` in [`../todoist-area-daily.gs`](../legacy-implementation/todoist-area-daily.gs) |
 | **Strategy** | Replace today's rows, then append (the `Overdue` idiom) |
 | **Backfill** | `backfillAreaDaily()` — fills `completed` for past days only |
 
@@ -65,7 +65,7 @@ drifting and something needs an `area-*` label or a home under a parent project.
 | --- | --- | --- |
 | Hourly re-run | Today's rows are cleared and rewritten | The intraday trigger must refresh the day, not stack a second set on top |
 | An area with nothing in it | Still gets a row, with zeros | That is the entire point of a dense grid |
-| A new area appears | Picked up automatically | The row set comes from `AREA_ORDER`, so adding an area is one edit in [`../todoist-areas.gs`](../todoist-areas.gs) |
+| A new area appears | Picked up automatically | The row set comes from `AREA_ORDER`, so adding an area is one edit in [`../todoist-areas.gs`](../legacy-implementation/todoist-areas.gs) |
 | Layout change | The tab is **archived**, not cleared | C–F are observations that cannot be re-observed. Only `completed` could be rebuilt |
 | Completion attribution | The **local** day of `completed_at` | Matches `HabitDaily`, so the two tabs agree on which day a completion belongs to |
 

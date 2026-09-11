@@ -8,7 +8,8 @@ and design docs, currently being ported from Apps Script to TypeScript.
 ## Layout
 
 - **One top-level directory per integration**, each holding its own code,
-  schema docs and setup: `todoist/` (the big one, 10 `.gs` files),
+  schema docs and setup: `todoist/` (the big one — its 10 `.gs` files live in
+  `todoist/legacy-implementation/`),
   `health/` (schema only for now — its webhook was deleted pending a
   rework), `event-log/` (which also holds every Apple Shortcut). Read the directory's `README.md` and `schema*.md`
   before changing any sync script's output shape — the schema docs are the

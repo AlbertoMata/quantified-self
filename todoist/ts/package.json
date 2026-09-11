@@ -12,7 +12,13 @@
 		"test": "node --test \"src/**/*.test.ts\"",
 		"clasp": "clasp",
 		"clasp:login": "clasp login",
-		"clasp:whoami": "clasp show-authorized-user"
+		"clasp:whoami": "clasp show-authorized-user",
+		"stage:sync": "node scripts/prepare-legacy.mjs sync",
+		"stage:log": "node scripts/prepare-legacy.mjs log",
+		"status:sync": "npm run stage:sync && clasp -P .clasp-sync.json status",
+		"status:log": "npm run stage:log && clasp -P .clasp-log.json status",
+		"push:sync": "npm run stage:sync && clasp -P .clasp-sync.json push",
+		"push:log": "npm run stage:log && clasp -P .clasp-log.json push"
 	},
 	"devDependencies": {
 		"@google/clasp": "^3.4.1",

@@ -11,7 +11,7 @@ get closed, and how long did it sit?"*
 | | |
 | --- | --- |
 | **Sheet · tab** | `quantified-self-todoist` · `BillCycle` |
-| **Written by** | `syncBillCycle()` in [`../todoist-bill-cycle.gs`](../todoist-bill-cycle.gs) |
+| **Written by** | `syncBillCycle()` in [`../todoist-bill-cycle.gs`](../legacy-implementation/todoist-bill-cycle.gs) |
 | **Strategy** | Full rebuild every run from `Completions` + the live task list — idempotent and self-healing |
 | **Dedup key** | `task_id\|cycle_due_date` |
 
