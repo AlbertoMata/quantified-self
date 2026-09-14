@@ -106,7 +106,8 @@ quantified-self/
 ### Phase 1 — Shortcuts + Log sheet (manual events)
 
 1. Create `quantified-self-log` in Google Sheets with a `Log` tab
-2. Deploy `event-log/apps-script.gs` as a Web App — copy the URL
+2. Push the webhook with `npm --workspace todoist/ts run push:log`, then
+   **Deploy → New deployment → Web App** and copy the URL
 3. Install Apple Shortcuts from `event-log/shortcuts/` — paste the URL into each one
 4. Assign Siri phrases and Watch complications (see `event-log/shortcuts/README.md`)
 5. Connect `quantified-self-log` to Looker Studio

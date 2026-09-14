@@ -29,16 +29,19 @@ The Apps Script (`../event-log/apps-script.gs`) is the glue between Shortcuts an
 
 ### Deploy steps
 
-1. Open your `quantified-self-log` Google Sheet
-2. Go to **Extensions → Apps Script**
-3. Delete any existing code and paste the contents of `event-log/apps-script.gs`
-4. Save (Cmd+S)
-5. Click **Deploy → New deployment**
+1. Deploy the code from the repo: `npm --workspace todoist/ts run push:log`
+   *(run `status:log` first to see exactly what would be pushed — it changes nothing)*
+2. Open your `quantified-self-log` Google Sheet
+3. Go to **Extensions → Apps Script** and confirm the pushed code is there
+4. Click **Deploy → New deployment**
    - Type: **Web app**
    - Execute as: **Me**
    - Who has access: **Anyone**
-6. Click **Deploy** → authorize when prompted
-7. Copy the **Web app URL** — paste this into every Shortcut
+5. Click **Deploy** → authorize when prompted
+6. Copy the **Web app URL** — paste this into every Shortcut
+
+A later `push:log` updates the code but **not** a deployment pinned to a numbered version —
+check *Deploy → Manage deployments* if a change does not seem to take effect.
 
 > **Security note**: the URL is a secret — anyone with it can write to your sheet. Don't commit it to the repo.
 

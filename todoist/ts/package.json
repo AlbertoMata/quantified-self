@@ -13,16 +13,20 @@
 		"clasp": "clasp",
 		"clasp:login": "clasp login",
 		"clasp:whoami": "clasp show-authorized-user",
-		"stage:sync": "node scripts/prepare-legacy.mjs sync",
+		"build": "node scripts/build.mjs",
+		"stage:sync": "node scripts/prepare-legacy.mjs sync && npm run build",
 		"stage:log": "node scripts/prepare-legacy.mjs log",
 		"status:sync": "npm run stage:sync && clasp -P .clasp-sync.json status",
 		"status:log": "npm run stage:log && clasp -P .clasp-log.json status",
-		"push:sync": "npm run stage:sync && clasp -P .clasp-sync.json push",
-		"push:log": "npm run stage:log && clasp -P .clasp-log.json push"
+		"verify:sync": "node scripts/verify-push.mjs sync",
+		"verify:log": "node scripts/verify-push.mjs log",
+		"push:sync": "npm run stage:sync && clasp -P .clasp-sync.json push && npm run verify:sync",
+		"push:log": "npm run stage:log && clasp -P .clasp-log.json push && npm run verify:log"
 	},
 	"devDependencies": {
 		"@google/clasp": "^3.4.1",
 		"@types/node": "^24.13.4",
+		"esbuild": "^0.28.2",
 		"typescript": "^5.8.0"
 	}
 }

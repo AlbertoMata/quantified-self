@@ -1,7 +1,7 @@
 # Apps Script → TypeScript port — design
 
-**Status** (2026-09-11): **Phase A nearly done — A1–A5 complete for the Todoist project.**
-The legacy `.gs` are deployed by `clasp push` and verified against the remote. The
+**Status** (2026-09-14): **Phases A–D are complete.** Every tab, the reschedule and the webhook all have TypeScript behind them — **344 tests**, all deployed, all writing only `*_port` shadow tabs. The first manual runs found a real upstream failure and closed it — see [the 503 finding](#the-first-real-failure-a-503-and-what-it-cost). **Phase E is next, and it is the risky one**: it starts with a fresh dated backup and ends with the swap.
+Both Apps Script projects — the Todoist sync and the event-log webhook — are now deployed by `clasp push` and verified against the remote. **Copy-paste deployment is over**, which was Phase A's whole point. The
 `todoist/ts/` workspace is green (`npm run typecheck`, `npm test` 6/6, Node running `.ts` with
 no build step). No TypeScript has been deployed yet.
 
@@ -11,18 +11,51 @@ you should not need to read it top to bottom.
 
 ## Next actions
 
-In order. **A8 is the only hard blocker** — Phase B writes nothing until B4, but once it does,
-that backup is the sole recovery path for the two tabs that cannot be rebuilt. A6 and A9 need
-a browser; A9 then needs a terminal with clasp auth. A7 and A10 I can do unattended.
+**The first TypeScript is deployed and executed.** `portPing()` ran green in the live editor at
+2026-09-14 22:46 local, beside the ten legacy `.gs`, which are all still there. **71 tests**,
+none needing a platform. Nothing the port has deployed can write anything.
+
+**Phase D is done.** Everything the legacy implementation does now exists in TypeScript,
+deployed beside it, writing nothing the legacy code owns.
+
+**Phase E needs you to start it**, and it is the first phase where a mistake costs data rather
+than time:
+
+| Step | What you do |
+| --- | --- |
+| **E0** ✅ | **Already covered.** The A8 backup was taken 2026-09-13 and the port has written nothing to a real tab since, so it is still an accurate restore point. Retake it only if a long gap opens before E4 |
+| **E1** 🔶 | Install `port`-prefixed triggers **offset 15–30 minutes** from the legacy ones ([why](#running-two-implementations-at-once)) |
+
+Before either, it is worth running each pipeline once by hand — dry run first — so the shadow
+tabs exist and hold a day of data to look at.
+
+**Worth doing when you have five minutes**, because it starts Phase E's parity data accruing:
+run each `…DryRun` first, then the real one.
+
+| Run | Creates |
+| --- | --- |
+| `portSyncOverdueDryRun` → `portSyncOverdue` | `Overdue_port` |
+| `portSyncRecurringStatusDryRun` → `portSyncRecurringStatus` | `RecurringStatus_port` |
+| `portSyncKarmaStatsDryRun` → `portSyncKarmaStats` | `KarmaStats_port` |
+| `portSyncCompletionsDryRun` → `portSyncCompletions` | `Completions_port` |
+
+**`portSyncCompletions` will fetch a full 90-day window on its first run**, because its shadow
+tab is empty — that is the designed behaviour, not a bug, and it is how the tab refills itself.
+
+**Optional, whenever you like:** run `portPingWriteDryRun` in the editor, then `portPingWrite`.
+The first logs the row it would append and touches nothing; the second creates a `Ping_port` tab
+with one row. It is the first thing the port writes anywhere, deliberately trivial, and the tab
+is safe to delete.
+
+One loose end that is not a step: the event-log **Web App deployment** may still serve an older
+version. A push changes the code; only a deployment tracking `HEAD` picks it up automatically.
+Worth a glance at *Deploy → Manage deployments* — see [A9](#a9-the-event-log-webhook).
 
 | # | Step | What to do | Why it blocks |
 | --- | --- | --- | --- |
-| 1 | **A8** 🔶 | `quantified-self-todoist` → File → Make a copy, name it with today's date, then never touch it | The port develops against production. This copy is the only thing that can restore a deleted `TaskDaily` row — see [safety rails](#safety-rails-without-a-second-project) |
-| 2 | **A6** 🔶 | Open the spreadsheet and confirm the `BillCycle`, `AreaDaily` and `TaskDaily` tabs exist, and that `Completions` has the `area` / `area_source` / `was_overdue` columns | The life-areas *code* is live (A3 proved it) but nobody has confirmed the tabs are. If they are missing, the nightly run is failing silently |
-| 3 | **A9** 🔶 | `quantified-self-log` → Extensions → Apps Script → Project Settings → copy the Script ID | `push:log` cannot run without it, so the event-log webhook is still deployed by paste |
-| 4 | **A7** | Docs: paste → `clasp push` | Mostly done incidentally; needs a sweep |
-| 5 | **A10** | The `verify:<project>` script | `clasp push` exits 0 when it skips. Until this exists, every push needs a manual re-read |
-| 6 | **B1** | The six port interfaces — pure types, touches nothing live | Start of the port proper |
+| 1 | **E1** 🔶 | `port` triggers, offset 15–30 minutes from the legacy ones | Two implementations, one token, no locking anywhere |
+| 2 | **E2** | Let both run for several days | Parity needs data from identical input and timing |
+| 3 | **E3** | The diff harness comparing `X` against `X_port` | What parity actually means, mechanically |
 
 ## How to read this plan
 
@@ -78,7 +111,7 @@ action from you** — that is where to guide me.
 | Phase | What it achieves | Touches production? |
 | --- | --- | --- |
 | **A** — clasp | Deployment stops being copy-paste. No TypeScript | Yes — pushes the legacy `.gs` it already runs |
-| **B** — the seam | The six port interfaces, the GAS adapters, the build, the guards | Only a `portPing()` smoke test |
+| **B** — the seam | Seven port interfaces, both adapters, the build, the guards, the layering test | Only the `portPing` smoke tests |
 | **C** — the pure core | Dates, keys, habits, areas: the logic with no I/O | No |
 | **D** — pipelines | One tab per step, each a vertical slice ending in a working entry point | Writes `*_port` shadow tabs only |
 | **E** — cutover | Parallel run, tab-by-tab parity, then the swap | Yes — this is the risky phase |
@@ -90,7 +123,7 @@ action from you** — that is where to guide me.
 > therefore moves from *a separate project and spreadsheet* to **separate tab names and
 > separate global names**, inside the one project. The rails are in
 > [Safety rails without a second project](#safety-rails-without-a-second-project), and the
-> cheap one — a dated backup copy — is step **A8**.
+> cheap one — a dated backup copy — is step **A8**, done on 2026-09-13.
 >
 > Git covers the code and nothing else. It does not hold the spreadsheet, and it does not hold
 > Script Properties. `TaskDaily` and `AreaDaily` derive their snapshot columns from their own
@@ -107,12 +140,12 @@ No TypeScript yet. This phase ends copy-paste deployment.
 | **A2** ✅ | `@google/clasp` (v3.4.1) added, `.clasp.example.json` committed, real `.clasp-*.json` gitignored, `clasp:login` / `clasp:whoami` scripts wired | `clasp:whoami` reports the authorised account |
 | **A3** ✅ | `clasp pull` of both standalone projects into the **scratchpad** (never the working tree — pull overwrites), diffed against the repo with formatting normalised | [Findings](#what-the-a3-pull-found): 9/11 files identical, 2 differences, both understood |
 | **A4** ✅ | Manifest **captured** to `todoist/ts/appsscript/todoist.json` (the Everhour one was dropped with the integration), and the [three decisions](#a4-the-three-decisions-settled) settled: **both `Fullsteam` and `Ascensus` are gone from Todoist** and out of scope, `localDayOf` ships deduplicated, the manifest stays out of the source tree | All three answered. Decision 1 turned out to need a **real code change** — `TARGET_PROJECTS` is now `["Work"]` |
-| **A5** ✅ (`sync`) 🔶 (`log`) | [`scripts/prepare-legacy.mjs`](../../todoist/ts/scripts/prepare-legacy.mjs) stages a project's `.gs` set + its manifest into `dist/<project>/`; `stage:*`, `status:*` and `push:*` scripts wired for `sync` and `log`. Legacy stages **unbundled**, one file per `.gs`, so the editor stays diffable file-by-file; bundling starts at B4. **`sync` is pushed and verified.** `log` is still blocked: no Script ID and no manifest ([why](#a5-the-first-push-and-what-it-did)) | **Met for `sync`:** the remote was re-read after the push — 11/11 files match `dist/sync/`, no stale files remain, and the duplicate `localDayOf` is gone (A4 #2). **The re-read is the proof, not the exit code** — `clasp push` exits 0 when it skips |
-| **A6** 🔶 | **Verify**, not deploy — the four life-areas files are already live (A3). What remains is whether the three tabs and the Completions area columns exist, per [the documented order](life-areas.md#deploying), and correcting that doc's status | Three new tabs exist; `syncTodoist()` runs green |
-| **A7** | `CLAUDE.md`, `README.md`, `docs/sheets.md` updated: paste → `clasp push` | The setup steps no longer mention the editor |
-| **A8** 🔶 | **A dated backup copy** of `quantified-self-todoist` — File → Make a copy, named with today's date, then left untouched. No second Apps Script project: the port develops in the production project ([decision](#one-project-what-changes)). This is the only thing standing between a bad `replaceWhere` and unrecoverable `TaskDaily`/`AreaDaily` history | A copy exists, dated, and nothing writes to it |
-| **A9** 🔶 | **Unblock `push:log`** — the event-log webhook's Script ID from *Extensions → Apps Script → Project Settings*, then `clasp clone` it into a scratch directory and copy its real `appsscript.json` to `todoist/ts/appsscript/log.json`. Never hand-write that manifest: for a bound Web App it carries `webapp.access` and `executeAs`, so a guess can change who may call the webhook or break the URL the Shortcuts POST to | `status:log` lists files; `push:log` round-trips and a re-read matches |
-| **A10** | **`verify:<project>`** — re-reads the remote and diffs it against `dist/<project>/`, failing loudly on any mismatch or leftover file. Wired into `push:*` so a push that deploys nothing cannot report success | Deliberately breaking a staged file makes `verify:sync` fail |
+| **A5** ✅ | [`scripts/prepare-legacy.mjs`](../../todoist/ts/scripts/prepare-legacy.mjs) stages a project's `.gs` set + its manifest into `dist/<project>/`; `stage:*`, `status:*` and `push:*` scripts wired for `sync` and `log`. Legacy stages **unbundled**, one file per `.gs`, so the editor stays diffable file-by-file; bundling starts at B4. **`sync` is pushed and verified**, and `log` followed at [A9](#a9-the-event-log-webhook) — both projects now deploy by push | **Met for both projects.** Each remote was re-read after its push: 11/11 files match `dist/sync/` (and the duplicate `localDayOf` is gone, A4 #2), 2/2 match `dist/log/`, with no stale files left in either. **The re-read is the proof, not the exit code** — `clasp push` exits 0 when it skips |
+| **A6** ✅ | **Verify**, not deploy — the four life-areas files were already live (A3). You confirmed on 2026-09-13 that the `BillCycle`, `AreaDaily` and `TaskDaily` tabs exist and `Completions` carries `area` / `area_source` / `was_overdue`. [`life-areas.md`](life-areas.md) has been corrected: its "Nothing is deployed" status and the matching Known-gaps row are resolved | **Met.** The three tabs exist and the area columns are present — so the nightly run has been writing them, not failing silently |
+| **A7** ✅ | Setup docs rewritten from paste to `clasp push`, across **five** files rather than the three planned: `CLAUDE.md` (now carries the commands and the three traps, not just a caveat), `README.md`, `docs/sheets.md` (a per-project command table), and the two the plan had missed — `event-log/README.md` and `event-log/shortcuts/README.md`, which still said "delete any existing code and paste" | **Met.** No doc tells you to paste `.gs` into the editor. The remaining "paste" instructions are all legitimate — header rows into a tab, and the Web App URL into a Shortcut |
+| **A8** ✅ | **A dated backup copy** of `quantified-self-todoist` — File → Make a copy, named with today's date, then left untouched. No second Apps Script project: the port develops in the production project ([decision](#one-project-what-changes)). This is the only thing standing between a bad `replaceWhere` and unrecoverable `TaskDaily`/`AreaDaily` history | **Met.** A dated copy exists as of 2026-09-13, and nothing writes to it |
+| **A9** ✅ | **Unblock `push:log`** — Script ID captured 2026-09-13 into the gitignored `.clasp-log.json`, and the **real manifest** cloned to `todoist/ts/appsscript/log.json`. It was worth refusing to guess: it carries `webapp.executeAs: USER_DEPLOYING` and `webapp.access: ANYONE_ANONYMOUS`, the settings the Shortcuts' URL depends on. Pushed 2026-09-14 ([what the diff found](#a9-the-event-log-webhook)) | **Met.** The remote was re-read after the push: both files match `dist/log/` byte-for-byte, no stale files remain, and the `webapp` block survived intact |
+| **A10** ✅ | **[`scripts/verify-push.mjs`](../../todoist/ts/scripts/verify-push.mjs)** — `clasp pull`s the live project into a throwaway directory and diffs it against `dist/<project>/`, reporting `DIFFERS` / `MISSING` / `STALE` per file and exiting 1 on any of them. Wired into both `push:*` scripts, so a push that deploys nothing can no longer report success. It compares names without extensions, because Apps Script stores a type rather than a filename and a staged `.gs` returns from a pull as `.js` | **Met, and all four paths exercised.** Clean: 11/11 `sync`, 2/2 `log`. Then deliberately broken three ways — an edited staged file (`DIFFERS`), a deleted one (`STALE`), an unpushed addition (`MISSING`) — each exiting 1. Restaging returns it to green |
 
 ### Phase B — The seam
 
@@ -120,14 +153,14 @@ The interfaces that make everything above them platform-free. No behaviour moves
 
 | Step | What lands | Proof it's done |
 | --- | --- | --- |
-| **B1** | `src/ports/` — the six interfaces: `HttpTransport`, `TableStore`, `KeyValueStore`, `CacheStore`, `Clock`, `Logger` | `typecheck` passes; no implementation exists yet, by design |
-| **B2** | `src/core/write-plan.ts` — `WriteOp`, `WritePlan`, `Match`; and `src/core/row.ts` | Unit tests for the three verbs against an in-memory table |
-| **B3** | `src/adapters/gas/` — all six ports implemented over `SpreadsheetApp`, `UrlFetchApp`, `PropertiesService`, `CacheService`, `Session`, `Utilities`, `Logger` | Each adapter has a test using a fake of the GAS global |
-| **B4** | esbuild build → **one file**, staged alongside the ten legacy `.gs` in `dist/sync/` because a push replaces the whole project ([why](#one-project-what-changes)). Manifest copied in; IIFE + a generated global footer that **prefixes every entry point with `port`** | A hello-world `portPing()` pushes, runs in the live editor, and **the legacy files are all still present afterwards** — verified by re-reading the remote, not by the exit code |
-| **B4b** | **The guards that replace a second project.** There is only one spreadsheet ID now, so a protected-ID list is meaningless. Instead: the `TableStore` refuses any tab name not ending `_port` unless `allowProductionTabs` is explicitly true, and the `KeyValueStore` refuses any key not starting `PORT_` | Tests assert that writing `Overdue` throws while `Overdue_port` succeeds, and that writing `TODOIST_LAST_SYNC` throws while `PORT_TODOIST_LAST_SYNC` succeeds |
-| **B4c** | **Dry-run mode** — the applier logs the `WritePlan` instead of applying it | Running any entry point with `dryRun: true` touches no cell and prints every op it would have performed |
-| **B5** | `src/adapters/node/` — the same six ports, stubbed to throw `NotImplemented` | The shape exists from day one so Phase F is filling in blanks, not redesigning |
-| **B6** | **The layering test** — no file outside `src/adapters/gas/` may name a platform global | `npm test` fails if anyone reaches through the seam |
+| **B1** ✅ | `src/ports/` — the interfaces, and **seven rather than six**: the planned `HttpTransport`, `TableStore`, `KeyValueStore`, `CacheStore`, `Clock`, `Logger`, plus **`IdGenerator`** ([why](#b1-what-the-seven-ports-settled)). Also `values.ts` (`CellValue`, `Row`, `TableName`) and a `Runtime` bundle so an entry point stays ~8 lines | **Met, and more than typecheck.** `typecheck` clean and `npm test` 11/11: a fake of every port is built in [`ports.test.ts`](../../todoist/ts/src/ports/ports.test.ts), proving the seam is satisfiable with no platform at all. No implementation ships — the fakes live in the test |
+| **B2** ✅ | `src/core/write-plan.ts` — `WriteOperation`, `WritePlan`, `Match` (**with a third case the design lacked**, [why](#b2-what-the-three-verbs-cost)), the pure `resolveWriteOperation` resolver and the builders; `src/core/row.ts` — column lookup by name, short-row reads, width checks; `src/core/apply-write-plan.ts` — the thin applier, with dry-run built in | **Met.** 34 tests green, all three verbs covered against an in-memory table including the empty, first-run, no-rows and duplicate-key cases — plus the refusal that protects `TaskDaily` |
+| **B3** ✅ | `src/adapters/gas/` — all seven ports over `SpreadsheetApp`, `UrlFetchApp`, `PropertiesService`, `CacheService`, `Utilities` and `Logger`. (`Session` is **not** used: `getScriptTimeZone()` is deleted by design.) Every adapter takes its API as an argument, so the globals are named in exactly one file, `gas-runtime.ts` | **Met, and beyond it.** 65 tests: a fake per global, plus an end-to-end test applying a real `WritePlan` through the real adapter — which is what actually proves the clear-then-write contract ([findings](#b3-what-the-adapters-proved)) |
+| **B4** ✅ | esbuild → **one file**, `dist/sync/port-bundle.gs` (11.3 KB), staged alongside the ten legacy `.gs` because a push replaces the whole project ([why](#one-project-what-changes)). IIFE + a generated footer that **prefixes every entry point with `port`**, both driven by [`registry.ts`](../../todoist/ts/src/entrypoints/registry.ts). The build **runs the bundle in a sandbox before writing it** ([findings](#b4-the-first-typescript-in-production)) | **Fully met.** The live project holds 12 files: all **10 legacy `.gs` still present**, the bundle, and the manifest. The push was purely additive — one NEW file, nothing changed or deleted — and `verify:sync` (A10) ran inside `push:sync` and reported 12/12. **`portPing()` then ran green in the editor**, logging both expected lines and completing without error |
+| **B4b** ✅ | **The guards that replace a second project**, in [`core/guards.ts`](../../todoist/ts/src/core/guards.ts) — decorators over any `TableStore`/`KeyValueStore`, **on by default** in `createGasRuntime`. Writes are restricted to `*_port` tabs and `PORT_` keys; **reads are unrestricted**, which is not a loophole but a requirement. Plus `assertPlanIsAllowed`, an up-front check the applier always runs ([why](#b4b-two-rails-and-the-hole-between-them)) | **Met.** 84 tests. `Overdue` throws while `Overdue_port` succeeds; `TODOIST_LAST_SYNC` throws while `PORT_TODOIST_LAST_SYNC` succeeds; a plan aimed at a production tab is refused **before even a read is issued** — dry runs included |
+| **B4c** ✅ | **Dry-run mode**, reachable from the editor. The applier already logged instead of applying (B2) and refused a bad plan either way (B4b); what was missing was a way to *ask* — the Run button passes no arguments. The build now generates a **`…DryRun` twin** for every entry point that declares `writes`, sitting directly beneath its real counterpart in the dropdown. Also `pingWrite`, the first entry point that writes anything ([findings](#b4c-a-dry-run-you-can-actually-reach)) | **Met.** 90 tests. A dry run of `pingWrite` creates no tab, persists no state, and still logs the row it would append; a real run creates `Ping_port` and writes `PORT_PING_LAST_RUN` |
+| **B5** ✅ | `src/adapters/node/` — all seven ports. **Four are already real**: `Clock` (with a genuinely synchronous `sleep` via `Atomics.wait`), `Logger`, `IdGenerator` (`crypto.randomUUID`) and a TTL-honouring `CacheStore`. Three throw `notImplemented` naming the step that will write them ([findings](#b5-the-bill-for-a-synchronous-seam)) | **Met.** 104 tests. The Node runtime satisfies every port, is guarded identically to the Apps Script one, and the stubs fail loudly rather than returning a plausible empty value |
+| **B6** ✅ | **The layering test**, [`src/layering.test.ts`](../../todoist/ts/src/layering.test.ts) — four rules, not one: no Google global outside `adapters/gas/`, no Node built-in outside `adapters/node/`, no adapter import from `core`/`services`/`pipelines`, and a self-test proving the detector fires ([findings](#b6-a-test-that-can-actually-fail)) | **Met, and proved by mutation.** Adding `SpreadsheetApp.openById()` to `core/row.ts` made it fail with `core/row.ts: SpreadsheetApp`; removing it made it pass again |
 
 ### Phase C — The pure core
 
@@ -135,10 +168,10 @@ Small, heavily tested, and where the naming rules get established for everything
 
 | Step | What lands | Proof it's done |
 | --- | --- | --- |
-| **C1** | `core/dates.ts` — the duplicate `toDateString` dies here. One `formatUtcDay()`, one `formatDayInTimezone(date, timezone)`, never an ambient timezone | Tests for the UTC-vs-local evening case that [`history.md`](../../todoist/history.md) records as a real 2026-08-20 bug |
-| **C2** | `core/labels.ts`, `core/numbers.ts`, `core/keys.ts` — label splitting, `toNumberOrZero`, the composite dedup keys | Tests per function |
-| **C3** | `core/habits.ts` — `habitDayStatus`, `nextStreak`, `dueTimeOf`, `isRestDay` | The habits scratchpad harness becomes committed tests |
-| **C4** | `core/areas.ts` — area resolution, bill-cycle status | The life-areas harness (114 assertions) becomes committed tests |
+| **C1** ✅ | `core/dates.ts` — the duplicate `toDateString` dies here. `formatUtcDay`, `formatDayInTimezone(instant, timezone)`, `cellValueToDayKey`, `cellValueToLocalDay`, `daysBetweenDays`, `addDaysToDay`, `isValidDayKey`. **No ambient timezone anywhere** | **Met.** 19 tests, including the 2026-08-20 evening case from [`history.md`](../../todoist/history.md) and the 23:30 nightly run — the one that finalises the day, and so the one that must not file under tomorrow |
+| **C2** ✅ | `core/labels.ts`, `core/numbers.ts`, `core/keys.ts` — label splitting from either shape, `toNumberOrZero` **and** `toNumberOrNull`, the composite dedup keys and a `Set` builder | **Met.** 19 tests. The key test that matters: a recurring task's completions must not collapse to one row ([why](#c1c4-what-porting-the-core-surfaced)) |
+| **C3** ✅ | `core/habits.ts` — `habitDayStatus`, `nextStreak`, `dueTimeOf`, `clockTimeOf`, `habitDueTime`, `isRestDay` | **Met.** 24 tests, the scratchpad harness committed — including a 30-day streak walk, both recurrence separators, and the weekend that must not break a streak |
+| **C4** ✅ | `core/areas.ts` — the four-step resolution with its `source` marker — and `core/bill-cycle.ts` — status, lag, cycle, streak | **Met.** 20 tests. Includes the multi-label determinism case, a cyclic-parent guard, and the mortgage cycles reading `closed_late` as documented rather than as a bug |
 
 ### Phase D — One pipeline per step
 
@@ -148,27 +181,27 @@ abandonable.
 
 | Step | Pipeline | Why in this position |
 | --- | --- | --- |
-| **D1** | `services/todoist/` — request descriptors, response parsers, the pagination step rule | The shared dependency of everything below |
-| **D2** | Overdue | Simplest possible shape: one call → one `replaceWhere`. Proves the sandwich |
-| **D3** | RecurringStatus | Same shape; it is the spine `HabitDaily` needs |
-| **D4** | KarmaStats | Introduces `upsert` and the two-candidate stats endpoint |
-| **D5** | Completions + the In Review source | Three sources, a persisted cursor, composite dedup. The hardest fetch pipeline — do it once the shape is proven |
-| **D6** | BillCycle | First derived-from-Completions tab |
-| **D7** | AreaDaily | Derived + snapshot hybrid, with the `counts_observed` flag |
-| **D8** | TaskDaily | **Observed-only, self-referential.** Its aging columns read its own previous day |
-| **D9** | HabitDaily | The most logic of any tab; reads two tabs, writes a window |
+| **D1** ✅ | `services/todoist/` — `requests.ts` (pure descriptors, the `limit=50` cap, the query builder), `responses.ts` (three page shapes, legible non-JSON failures, id→name and tree builders), `fetch-pages.ts` (the one impure function, taking ports so it runs anywhere) | **Met.** 16 tests, including all three page shapes, the empty-page stop, the page budget, and the courtesy delay landing between pages but not after the last |
+| **D2** ✅ | Overdue — `pipelines/overdue.ts`, a pure `planOverdue(snapshot, tab, today) → WritePlan`, plus the `portSyncOverdue` entry point wiring fetch → plan → apply | **Met and deployed.** 15 tests against the [schema](../../todoist/schema/overdue.md)'s ten columns; the entry point is live in the editor and writes only `Overdue_port` ([findings](#d1d2-the-first-real-pipeline)) |
+| **D3** ✅ | RecurringStatus — `planRecurringStatus`, same `replaceWhere` shape as Overdue | **Met.** 8 tests. The recurrence string is carried **verbatim**, because `HabitDaily` parses the time of day out of it and both separators occur live |
+| **D4** ✅ | KarmaStats — the first `upsert`, plus the two-candidate stats endpoint | **Met.** 12 tests, including the re-run case that would otherwise report a karma delta of zero ([findings](#d3d5-three-more-pipelines-and-a-real-bug)) |
+| **D5** ✅ | Completions — three sources, the In Review entered-since diff, composite dedup, and `completions-window.ts` for the cursor/clamp/backfill decision | **Met.** 22 tests across the pipeline and the window. **A real dedup bug was found and fixed here** ([findings](#d3d5-three-more-pipelines-and-a-real-bug)) |
+| **D6** ✅ | BillCycle — closed cycles from `Completions_port`, the one open cycle per bill from the live list, streaks per bill in cycle order. **The full rebuild `{ all: true }` exists for this tab** | **Met.** 6 tests, including the re-completed cycle that must keep its EARLIEST close, and the renamed bill that must show its current name on historical cycles |
+| **D7** ✅ | AreaDaily — snapshot columns C–F, `completed` derived from `Completions_port`, `counts_observed` marking the difference | **Met.** 7 tests. Pins that **API priority 4 is p1** — the UI label and the wire value run in opposite directions — and that `in_week` stays orthogonal to area |
+| **D8** ✅ | TaskDaily — 22 columns, work-stage normalisation, exit rows, and the four-case section-age rule | **Met.** 11 tests, including both silent failure modes: prior state must come from the day STRICTLY BEFORE today, and exit rows must be excluded from it ([findings](#d6d9-the-derived-tabs)) |
+| **D9** ✅ | HabitDaily — the dense grid, streak threading, the empty-tab auto-backfill, and the clamp that protects synthesised history | **Met.** 9 tests. Writes **nothing at all** when the spine is missing, rather than clearing the grid and refilling it with nothing |
 | ~~**D10**~~ | ~~Everhour~~ — **dropped.** Everhour is retired; see [`../../trackingtime/`](../../trackingtime/README.md). If [TrackingTime](../../trackingtime/README.md) is built by the time Phase D runs, write it here *natively* in the new layers rather than porting anything | No parity bar to clear makes it the easiest possible first native integration |
-| **D11** | Reschedule habits | The only write path to Todoist. Ported late, deliberately, and stays manual |
-| **D12** | The webhooks | `event-log/apps-script.gs` is tiny but a separate clasp project with its own deploy. The health webhook's code was **deleted pending a rework** — when it returns, write it in these layers rather than porting the old one |
+| **D11** ✅ | Reschedule habits — a **pure** `planHabitReschedule` returning `item_update` commands, and a separate step that issues them | **Met.** 18 tests. The guards cannot protect this one — **there is no shadow Todoist** — so the dry run is the only rail, and it is generated from a new `writesExternally` flag ([findings](#d11d12-the-two-write-paths)) |
+| **D12** ✅ (logic) | The event-log webhook's parsing and row-building, ported pure and tested. The health webhook's code was **deleted pending a rework** — when it returns, write it in these layers rather than porting the old one | **Met for the logic.** 12 tests. ⚠️ **Not yet deployed**: `event-log` is a separate clasp project and the port bundle is not staged into it, so the live webhook still runs the legacy `.gs`. That is deliberate — swapping a webhook that Apple Shortcuts POST to is a Phase E decision, not a Phase D one |
 
 ### Phase E — Cutover
 
 | Step | What happens |
 | --- | --- |
-| **E0** 🔶 | **Take a fresh dated backup copy** of `quantified-self-todoist` and leave it untouched. This is the rollback for everything E does |
+| **E0** ✅ | A dated backup copy of `quantified-self-todoist`, left untouched — the rollback for everything E does. **Satisfied by A8 (2026-09-13)**, which is still accurate: the port has only ever written `*_port` tabs. **Retake it before E4**, when the port starts writing the real ones, or if a long gap opens first |
 | **E1** | `port`-prefixed triggers installed alongside the legacy ones, **offset by 15–30 minutes so the two never run together** ([why](#running-two-implementations-at-once)). Legacy keeps writing the real tabs; the port writes only `*_port` tabs |
 | **E2** | Both run for several days — same spreadsheet, **disjoint tab sets**, identical input data and timing |
-| **E3** | A diff harness compares `X` against `X_port` for every tab. Row-for-row equality is the bar for `Overdue`, `KarmaStats`, `RecurringStatus`, `HabitDaily`, `BillCycle` |
+| **E3** | A diff harness compares `X` against `X_port` for every tab. Row-for-row equality is the bar for `Overdue`, `KarmaStats`, `RecurringStatus`, `HabitDaily`, `BillCycle`. **One expected divergence**: the port retries transient HTTP failures and the legacy does not, so the port may hold a row for a day the legacy lost to a blip ([why](#the-first-real-failure-a-503-and-what-it-cost)) |
 | **E4** 🔶 | **The swap**, in one sitting: disable the legacy triggers, drop the `port` prefix from the generated globals and the `_port` suffix from the tab targets, delete the old `*_port` tabs, promote `PORT_` state keys to their real names, and install the triggers under their final names. Keep the legacy `.gs` in the project but **untriggered** for a week as rollback |
 | **E5** | Freeze the legacy `.gs` files — a header line on each saying so |
 | **E6** | `docs/todoist/architecture.md` rewritten once, to describe `todoist/ts/` |
@@ -273,7 +306,7 @@ trackingtime/         # not built
 | `core/` | Dates, keys, habit status, streaks, area resolution, the `WritePlan` types | **No.** Pure, and the most heavily tested |
 | `services/` | Per-source knowledge: request descriptors, parsers, row mappers, the pagination rule | **No.** Describes requests, never issues them |
 | `pipelines/` | One per tab: `planX(snapshot, config, today) → WritePlan` | **No.** The nightly logic, with zero I/O |
-| `ports/` | Six interfaces | The seam itself |
+| `ports/` | Seven interfaces, plus the cell/row value types | The seam itself |
 | `adapters/` | `gas/` and `node/` implementations | **Yes**, and nowhere else |
 | `entrypoints/` | The registry plus ~8 lines per entry point | Yes |
 
@@ -298,7 +331,10 @@ export type WriteOperation =
     | { mode: "replaceWhere"; tab: string; column: number; match: Match; rows: Row[] }
     | { mode: "upsert"; tab: string; keyColumn: number; rows: Row[] };
 
-export type Match = { equals: string } | { onOrAfter: string };
+export type Match =
+    | { equals: string }
+    | { onOrAfter: string }
+    | { all: true };   // added at B2 — BillCycle is a full rebuild
 
 export interface WritePlan {
     writes: WriteOperation[];
@@ -308,7 +344,7 @@ export interface WritePlan {
 ```
 
 `Match` is a predicate rather than a bare equality because `HabitDaily` replaces a trailing
-*window*, not one day. Every other tab uses `equals`.
+*window*, not one day, and `BillCycle` replaces **all** of them. Everything else uses `equals`.
 
 ### One project: what changes
 
@@ -373,11 +409,11 @@ change is recoverable in seconds with `clasp push`. It holds none of this:
 | Apps Script triggers | Which functions run, and when |
 
 So the rails below replace the separate project. The first is the only one that protects the
-irreplaceable data, and it is one menu click.
+irreplaceable data, and it is one menu click. **The first one exists as of 2026-09-13 (A8).**
 
 | Rail | What it is | What it catches |
 | --- | --- | --- |
-| **A dated backup copy** (A8) | File → Make a copy, named with the date, never written to. Retaken at E0 | The unrecoverable case. Nothing else on this list restores a deleted `TaskDaily` row |
+| **A dated backup copy** (A8) ✅ | File → Make a copy, named with the date, never written to. Taken 2026-09-13 and still current — the port writes only `*_port` tabs, so nothing it has done since is in scope for a restore. **Retake before E4** | The unrecoverable case. Nothing else on this list restores a deleted `TaskDaily` row |
 | **Tab-name guard** (B4b) | The `TableStore` refuses any tab not ending `_port` unless `allowProductionTabs` is explicitly true | The port writing a tab the legacy code owns, or Looker reads |
 | **State-key guard** (B4b) | The `KeyValueStore` refuses any key not starting `PORT_` | The port advancing the legacy cursor — see below |
 | **Fail-closed config** | No spreadsheet ID has a default; an unset target throws | A missing property silently resolving to something |
@@ -567,7 +603,6 @@ The real risk of a parallel port is two implementations and one set of docs desc
    time someone adds a column and forgets the doc.
 6. **`CLAUDE.md` is updated in Phase A**, not at the end, because it steers every future session.
 
-
 ---
 
 ## Findings
@@ -585,7 +620,7 @@ destroy nothing — with one small exception, noted in the table.
 | Finding | Detail |
 | --- | --- |
 | **There are two standalone projects, not one** | *Quantified Self - Todoist Sync* (10 files) and *Quantified Self - Everhour Sync* (1 file, still named `Código.js`). The docs describe a single `quantified-self-sync` project holding both; that has never been true. This **settled the "one project or two?" open question** — it was already two. Since superseded: Everhour has been retired, so only the Todoist project is ported |
-| **The life-areas code is already deployed** | All four files — Areas, Area Daily, Bill Cycle, Task Daily — are live and byte-identical to the repo. [`life-areas.md`](life-areas.md) still says "Nothing is deployed / none of it has been pasted into Apps Script yet", which is **stale**. Whether the *tabs* exist is a separate question this pull cannot answer |
+| **The life-areas code is already deployed** | All four files — Areas, Area Daily, Bill Cycle, Task Daily — are live and byte-identical to the repo. [`life-areas.md`](life-areas.md) said "Nothing is deployed / none of it has been pasted into Apps Script yet", which was **stale** — corrected at A6. Whether the *tabs* existed was a separate question this pull could not answer; **A6 confirmed they do** |
 | **The editor is behind in one file** ⚠️ | *Habit Daily Grid* still defines `localDayOf()`, which the repo moved into Utilities. The live project therefore defines it **twice**. Harmless today — identical bodies — but it is a real collision, and pushing the repo fixes it. **A4 #2 confirmed the deduplicated version ships**, so A5's push is the fix |
 | **The editor is ahead in one comment** | *Sync Sections* mentions `Fullsteam / Ascensus / Work`; the repo said `Ascensus / Work` **at the time of the pull**. Comment-only — `TARGET_PROJECTS` was identical in both — so a push would lose a stale note, not behaviour. **A4 #1 then settled it: both `Fullsteam` and `Ascensus` are retired**, and the repo now says `Work` alone |
 | **Manifests captured** | Both are identical and minimal: `timeZone: America/Mexico_City`, `runtimeVersion: V8`, `exceptionLogging: STACKDRIVER`. This **confirms the timezone** the whole date layer depends on, and they are the manifests A4 brings into the repo |
@@ -733,15 +768,627 @@ a bound Web App, its access settings. A push that changes one should stop and as
 > script like `stage:sync && clasp push` reports **success** having deployed nothing, and any
 > future CI step would do the same. A5 was therefore not treated as finished by a push that
 > appeared to work — the remote was re-read and diffed against `dist/sync/`, which is what this
-> step's proof ("push, then a fresh pull matches") always meant. That check is currently done by
-> hand; a `verify:<project>` script would make it mechanical, and **B4's push scripts should
-> not ship without one**.
+> step's proof ("push, then a fresh pull matches") always meant. That check was done by hand
+> until **A10 made it mechanical** — [`verify-push.mjs`](../../todoist/ts/scripts/verify-push.mjs)
+> now runs inside both `push:*` scripts, so this trap cannot go unnoticed again.
 
-**`push:log` is blocked, deliberately.** The bound webhook has no Script ID captured and no
-manifest. `prepare-legacy` refuses rather than inventing one: a bound Web App's
-`appsscript.json` carries its `webapp.access` and `executeAs` settings, so a guessed manifest
-could change who may call the webhook or break the URL the Shortcuts already POST to. Capture
-the real one by pulling the project before pushing it.
+**`push:log` was blocked, deliberately**, until A9 — which is now done. The bound webhook had no Script ID and no
+manifest, and `prepare-legacy` refused rather than inventing one. That refusal was vindicated —
+see below.
+
+### A9: the event-log webhook
+
+**Pushed and verified on 2026-09-14.** The remote was re-read afterwards: `apps-script` and
+`appsscript` both match `dist/log/` byte-for-byte, no stale files were left behind, and the old
+`app-script` name is gone. The Script ID was captured the day before and the project read back
+through the Apps Script API before anything was staged — the record of that pre-push diff:
+
+| Check | Result |
+| --- | --- |
+| **Manifest** | **Byte-identical to live** (211 bytes both sides, no trailing newline). No `--force` needed, and no repeat of [the manifest trap](#the-manifest-trap-that-stopped-the-first-push) |
+| **Files** | Live holds exactly two — the manifest and one `SERVER_JS`. **Nothing in the editor is missing from the repo**, so a push deletes nothing |
+| **Content** | Differs, but **provably only in formatting** — see below |
+
+**Guessing the manifest would have been a real mistake.** It is not the minimal three-key file
+the standalone projects carry; it has a `webapp` block:
+
+```json
+"webapp": { "executeAs": "USER_DEPLOYING", "access": "ANYONE_ANONYMOUS" }
+```
+
+`ANYONE_ANONYMOUS` is what lets an Apple Shortcut POST without a Google session. A hand-written
+manifest omitting it, or defaulting to `ANYONE`/`MYSELF`, would break every Shortcut that logs
+an event — silently, since a Shortcut shows no error the phone surfaces.
+
+**The code difference is prettier, and only prettier.** The repo copy is tab-indented and the
+live copy is 2-space; comparing token streams rather than bytes, the two are identical apart
+from **5 trailing commas** prettier added inside call arguments. Trailing commas in calls are
+ES2017 and the project runs V8, so they parse. `doPost`, `doGet`, the `SHEET_NAME` constant and
+the five-column `appendRow` are unchanged.
+
+> **The push will rename the editor's file**, as A5's did. Live it is `app-script`; the repo
+> file is `apps-script.gs`, so it lands as `apps-script`. Content is unaffected.
+>
+> ⚠️ **A push changes the code, not necessarily what the URL serves.** A Web App deployment
+> pinned to a numbered version keeps serving that version until a new one is deployed; only a
+> deployment tracking `HEAD` (the `/dev` test URL) changes immediately. So after pushing, check
+> *Deploy → Manage deployments* to see whether the Shortcuts' URL actually picks this up — and
+> if it does need a redeploy, that is a second deliberate action, not a side effect of `push`.
+
+### B1: what the seven ports settled
+
+Writing the interfaces against the ten legacy `.gs` turned up things the plan's one-line list
+could not have: **the planned six ports do not cover what the code actually does.**
+
+| Platform call | Where it lands | Why it had nowhere to go |
+| --- | --- | --- |
+| `Utilities.getUuid()` | **`IdGenerator`**, a seventh port | Todoist's `/sync` needs a client-generated uuid per command and uses it for **idempotency** — replaying a command with the same uuid is a no-op. It is the only write path to Todoist, so that key is what stands between a retried run and a double reschedule. It fits none of the six |
+| `Utilities.sleep()` | **`Clock.sleep()`** | The paginator waits 300 ms between pages and the Completions windower 400 ms between windows, both to stay clear of Todoist's per-token rate limit. It belongs with the clock because it is the other consumer of wall time — and because a fake must *record* a sleep rather than perform one, or the suite pays for it |
+
+Three further decisions the interfaces encode, each of which could have gone the other way:
+
+- **A non-2xx response is returned, never thrown.** The legacy code passes
+  `muteHttpExceptions: true` and inspects the status itself, because Todoist answers a
+  rate-limit with 429 *and a body worth reading*. A transport that threw would destroy that body.
+  So `HttpResponse` is `{ status, body }` and a throw means the request could not be made at all.
+- **`TableStore` is row-oriented, not range-oriented.** No A1 notation and no 1-based column
+  arithmetic crosses the seam: `getRange(2, 1, n, m)` is an Apps Script detail that means nothing
+  to the Sheets API adapter, and off-by-one errors in it are exactly what should not be ported.
+  `deleteRows` is kept separate from `writeRows` precisely because deletion *shifts* everything
+  below it — the one operation here that can corrupt a tab wholesale from stale indices.
+- **A cell is not a string.** `CellValue` is `string | number | boolean | Date | null`, because
+  that is what a sheet hands back. Flattening a date cell to a string is how a column stops
+  charting in Looker.
+
+**`ensureTable` is what creates the `*_port` tabs.** The plan noted nothing creates them; it is
+now a named responsibility, and specified as idempotent so a pipeline can call it every run.
+
+> **A preview of B6, and a warning for it.** No file in `src/` names a Google global in *code*
+> — but six of them name one in a *comment*, explaining what the port replaces. A naive
+> `grep`-based layering test would fail on its own documentation. B6 must strip comments before
+> it checks, or it will be deleted by the first person it annoys.
+
+### B2: what the three verbs cost
+
+Mapping the eight strategies in [`todoist/README.md`](../../todoist/README.md) onto three verbs
+worked, but only after two corrections the design had not anticipated. Both came from reading
+the legacy code rather than the plan.
+
+**1. `Match` needed a third case.** `BillCycle` is a **full rebuild** — every data row is
+recomputed from `Completions` plus the live task list every night — and neither `equals` nor
+`onOrAfter` expresses "all of them". Without `{ all: true }`, `BillCycle` would have kept a
+hand-rolled fourth strategy, which is the exact outcome the three-verb model exists to prevent.
+
+**2. Clearing is not deleting, and the difference is load-bearing.** Both
+`todoist-bill-cycle.gs` and `todoist-habit-daily.gs` carry a comment explaining that they use
+`clearContent()` rather than `deleteRows()`, because **Sheets refuses to delete every unfrozen
+row** once the header is frozen — *"No puedes borrar todas las filas móviles"* — which it is the
+moment anyone freezes it by hand or converts the tab to a table. Both hit this in production.
+`TableStore` therefore gained `clearRowsFrom()`, and the applier clears and then writes at the
+same row, because clearing leaves the blank rows in place for the rewrite to land on.
+
+**The resolver refuses rather than guessing.** `replaceWhere` requires its matching rows to form
+a contiguous block at the *bottom* of the tab — which they always are, since every tab is
+appended in day order, and which the legacy code silently assumes. If that assumption is false
+the tab has been sorted or hand-edited, and clearing to the end would destroy rows nobody asked
+to touch. For `TaskDaily` and `AreaDaily` those rows cannot be re-fetched from anywhere, so it
+throws instead. That is the single most valuable test in the file.
+
+**Where the applier lives is a deliberate exception to the naming rule.**
+[`apply-write-plan.ts`](../../todoist/ts/src/core/apply-write-plan.ts) sits in `core/` even
+though the rule puts `apply` in `adapters/`. It reaches the outside world *only* through port
+interfaces and names no platform global, so it is byte-identical under Apps Script and Node;
+duplicating the trickiest ordering logic in the codebase into both adapters would be worse. The
+B6 test bans platform globals, which this satisfies — the rule is about platform coupling, and
+this has none.
+
+**Dry-run arrived early.** It was scheduled for B4c, but the applier is where it belongs and it
+is four lines there, so it exists and is tested now. The cheapest safety rail is available
+before anything can write.
+
+### B3: what the adapters proved
+
+The adapters are where the design meets the platform, and three things only became visible here.
+
+**The clear-then-write contract is real, and now tested end to end.** `resolveWriteOperation`
+emits `clearFrom(n)` followed by `write(n)` — *the same row* — which is only correct because
+`clearContent()` blanks cells and leaves the rows in place. Had clearing removed rows, every
+`replaceWhere` would have written into a gap and corrupted its tab. Unit tests on either side
+could not catch that; the integration test in
+[`gas-integration.test.ts`](../../todoist/ts/src/adapters/gas/gas-integration.test.ts) applies a
+real plan through the real adapter and does.
+
+**`clearRowsFrom` clears the full column width, not the populated one.** A stale value parked
+beyond the current data would survive a narrower clear and reappear as a ghost cell on the next
+whole-tab read — and `getDataRange()` reads the whole tab. It uses `getMaxColumns()` for that
+reason.
+
+**`CacheService` fails silently above 100KB** — the put is dropped and every later read misses,
+for ever. That is a performance bug with no symptom, and it is why the live task map was never
+cached. The adapter measures the value and throws instead, **counting UTF-8 bytes rather than
+characters**, because project names carry emoji (`💼 Work`) at four bytes each and a character
+count would wave through a value four times over the limit.
+
+Smaller decisions worth having written down:
+
+| Decision | Why |
+| --- | --- |
+| Every adapter takes its API as an argument | The globals are then named in **one** file (`gas-runtime.ts`), and everything else in `adapters/gas/` is testable under plain Node with a fake. That is the difference between "the adapter compiles" and "the adapter writes to the right cells" |
+| Structural types instead of `@types/google-apps-script` | No dependency, and the platform's blast radius is one readable file listing only the methods actually called |
+| The globals are read off `globalThis`, not declared ambiently | Under Node they are simply undefined, so `createGasRuntime()` fails immediately and legibly rather than throwing "SpreadsheetApp is not defined" from inside a pipeline |
+| `openById` once per run, sheets cached | It is a network call in disguise; the legacy code pays for it 16 times in a single nightly run |
+| Writing to a tab that does not exist **throws** | A typo in a tab name must not quietly create a second, empty tab. `ensureTable` is the only thing that creates one |
+| `readRows` asks `getLastRow()` first | `getDataRange()` on a brand-new sheet returns `[[""]]` — one blank cell — which would otherwise become a phantom row |
+
+> ⚠️ **A trap for B6.** The layering test cannot simply grep for the platform names. Our own
+> port is called `Logger`, which is also the name of the Apps Script global, so a naive check
+> flags `ports/logger.ts` and every file importing it. It must match the global's *use as a
+> value* (`Logger.log(`) rather than the bare word — and, as noted at B1, strip comments first,
+> since six files name a global while explaining what replaced it.
+
+### B4: the first TypeScript in production
+
+The bundle is live. The push added one file and changed nothing else, which is the least
+alarming shape a first deployment can have.
+
+| Check | Result |
+| --- | --- |
+| Pre-push diff | 11 remote files, 12 staged: **one NEW**, zero changed, zero deleted |
+| After the push | 12 files live — **10/10 legacy `.gs` still present**, plus the bundle and the manifest |
+| `verify:sync` | Ran automatically inside `push:sync` (A10) and reported 12/12 matching, no stale files |
+| Bundle | 11.3 KB, unminified, ES2019, one global namespace plus one `port*` function |
+
+**The build runs the bundle before it writes it.** `npm run build` evaluates the real output in
+a `node:vm` sandbox with stand-ins for the Google globals, asserts every generated global is
+actually a function, and invokes the diagnostics. Typechecking proves the *source* is sound;
+this proves the *artifact* is. An ES2019 violation, a footer naming something the IIFE never
+exported, or an error on the first line would all surface seconds after a build rather than in
+the executions dashboard after a push. The sandbox's `SpreadsheetApp` and `UrlFetchApp` throw on
+any use, so a smoke test that quietly reached for a sheet would fail rather than pass hollowly —
+and the file is written **only after the check passes**, so a broken bundle never sits in
+`dist/` waiting to be pushed.
+
+**Why the bundle is not minified.** The editor is where this gets debugged, there is no source
+map, and the whole thing is 11 KB. Minifying would save nothing that matters and cost every
+future stack trace.
+
+**The `port` prefix is applied by the build, not typed by hand.** The registry stores the name
+each entry point will have *after* cutover (`ping`, later `syncTodoist`), and `globalNameFor()`
+derives `portPing` / `portSyncTodoist`. Dropping the prefix at E4 is therefore a one-line change
+in one file, not a rename across eleven. The build **throws if two entries would generate the
+same global**, since in one flat scope the later definition silently wins — the exact bug the
+scheme exists to prevent.
+
+**The seam leaked once, and the check caught it.** The first version of the entry-point module
+read `PropertiesService` directly to fetch the spreadsheet id — a Google global outside
+`src/adapters/gas/`, which is the one rule B6 exists to enforce. The fix was a
+`createGasSettingLookup()` in the adapter, and it is a useful precedent: config has to be read
+*before* a runtime exists, so that lookup needs its own door through the seam rather than an
+exception to it.
+
+**What is deployed can do nothing.** `portPing()` reads the clock and writes two log lines. It
+opens no spreadsheet, reads no property and makes no request. The guards that will let later
+entry points write safely are B4b, and they land before any pipeline does.
+
+**The link a push could not prove — that Apps Script would actually *run* it — is now proven.**
+`portPing` executed in the editor on 2026-09-14 at 22:46 local, logged both expected lines and
+completed with no error. The chain holds end to end: TypeScript → esbuild → generated footer →
+`clasp push` → an Apps Script global → a successful execution.
+
+That run also settled something quietly. `createRuntime()` reads `TODOIST_SPREADSHEET_ID`
+through `requireSetting` **before** the entry point body runs, and `requireSetting` throws on a
+missing or empty value. The execution completing therefore confirms the Script Property exists
+and is populated — which every later entry point depends on, and which nothing had checked.
+
+### B4b: two rails, and the hole between them
+
+The guards are decorators rather than checks inside the GAS adapters. A guard baked into the
+only implementation cannot be tested apart from it, and the Node adapter (F2) needs exactly the
+same protection without a second copy of it.
+
+**Reads are unrestricted, and that asymmetry is the design.** The port *must* read what the
+legacy code wrote — `HabitDaily` is rebuilt from `Completions` and `RecurringStatus`, and the
+Completions cursor has to be read before it can be continued. Reading is harmless; writing is
+what cannot be undone. A guard that blocked reads would simply make the port unable to work.
+
+**The hole the tests found: a dry run bypassed both guards.** The store guards fire when a write
+is *attempted* — and a dry run never attempts one. So a dry run against `TaskDaily` printed a
+tidy list of operations and exited zero, reporting the plan as safe when running it for real
+would have been refused. **A rail that only works when you are not looking is worse than none**,
+because it teaches false confidence about the single most dangerous tab in the system.
+
+The fix is `assertPlanIsAllowed`, which the applier runs **first, every time, dry run or not**.
+The two layers are now defence in depth: the plan check catches a bad plan before anything is
+read, and the store guards catch anything that reaches a store without going through the
+applier. Both default closed, and both take their escape hatch as an explicit `=== true`
+argument at the call site — never from config, because a rail a stale Script Property can switch
+off is not a rail.
+
+| Rail | Fires when | Catches |
+| --- | --- | --- |
+| `assertPlanIsAllowed` (applier) | Before any read or write, dry run included | A plan built with a legacy tab name or a bare state key |
+| `guardTableStore` / `guardKeyValueStore` | At the moment of the call | Anything writing a store directly, without an applier |
+
+Smaller things worth having pinned by a test: the `_port` suffix and `PORT_` prefix are
+**case-sensitive** (`Overdue_PORT` is refused); a tab merely *containing* `_port` is not a
+shadow tab; and a **truthy-but-not-`true`** flag — the string `"yes"`, say, arriving from config
+— does not open the gate.
+
+### B4c: a dry run you can actually reach
+
+The applier could already log instead of apply, and B4b made it refuse a bad plan whether or not
+it was dry. What was missing was a way to **ask for a dry run from the editor**, where the Run
+button calls a zero-argument global and can pass nothing.
+
+So the build generates a twin. Any entry point declaring `writes` gets both
+`portSyncOverdue()` and `portSyncOverdueDryRun()`, the second sitting immediately beneath the
+first in the function dropdown. That placement is the point: the plan's standing rule is *never
+use the Run button on a port function*, and a rule is followed when the safe option is the
+nearer one, not when it is written down somewhere.
+
+A dry run is **not** free of I/O, which is worth knowing before relying on it: it still **reads**
+each tab to work out what it would change. It performs no write, creates no tab and persists no
+state — but it is not inert, and it cannot run without a real spreadsheet.
+
+**`pingWrite` is the first entry point that writes anything**, and it is deliberately the
+smallest possible one: one row appended to `Ping_port`, creating the tab if missing. It exercises
+the whole chain Phase D will lean on — a pure plan, the guards, the applier, the GAS
+`TableStore` — on a shadow tab no legacy code or Looker source reads. Safe to delete; the next
+run recreates it.
+
+> **The build's sandbox caught a mistake of mine immediately.** The self-check invoked every
+> entry point of kind `diagnostic`, and `pingWrite` is a diagnostic that writes — so it hit the
+> sandbox's throwing `SpreadsheetApp` and failed the build. The fix was to filter on **declared
+> `writes`** rather than on `kind`: `kind` says how a thing is invoked, `writes` says what it
+> touches, and only the second is a safety question. A dry run would not have been safe there
+> either, for the reason above.
+
+### B5: the bill for a synchronous seam
+
+Writing the Node side made the cost of one early decision concrete. The ports are
+**synchronous** because an Apps Script trigger cannot `await` — a rejected promise never reaches
+the executions dashboard, so a failed nightly run would report success. On the Apps Script side
+that was free: `UrlFetchApp` is synchronous already. **Node is where the bill lands**, and it is
+not small.
+
+`Clock.sleep` was solvable: `Atomics.wait` on a `SharedArrayBuffer` blocks the calling thread
+outright, which is exactly `Utilities.sleep`'s semantics. Blocking a thread is normally a
+mistake; here it *is* the contract, and the only callers are two courtesy delays whose whole
+purpose is for nothing to happen for a moment.
+
+**`HttpTransport` is the hard one**, and it is now documented in the stub rather than left to be
+discovered in Phase F. Node has no synchronous HTTP client. Three ways out:
+
+| Option | Verdict |
+| --- | --- |
+| `execFileSync("curl", …)` | **My inclination.** Genuinely synchronous, no dependency, trivially debuggable — you can paste the command into a shell. Costs a process per request, irrelevant for tens of calls a night. Needs the token passed by header file or stdin, **never argv**, where it would show in the process list |
+| A worker thread + `Atomics.wait` | The "proper" answer, at real complexity: serialising a response through a `SharedArrayBuffer` deserves its own tests |
+| Relax the contract to async | **The option to resist.** Every pipeline above the seam would become async — precisely what the ban exists to prevent — and the runtimes would stop sharing the code that matters |
+
+Two things the stubs record for F2 while they are fresh: `clearRowsFrom` must be a `values.clear`
+and **not** a `deleteDimension`, for the same reason the legacy code learned it; and the Sheets
+API hands a date back as a serial number unless asked otherwise, which `CellValue` admits a
+`Date` specifically to avoid.
+
+**A `_State` tab is not the same drawer as Script Properties.** Moving a sync from Apps Script to
+a runner therefore needs the cursor copied across as a deliberate migration step — otherwise it
+is discovered later, as a gap in `Completions`.
+
+**The Node adapters cost the Apps Script bundle nothing.** esbuild reaches them from no GAS
+entry point, so they are tree-shaken out entirely: the only occurrence of `createNodeRuntime` in
+`port-bundle.gs` is inside an error message telling you to use it instead.
+
+### B6: a test that can actually fail
+
+The architecture rests on one sentence — a platform global may only be named inside its adapter
+— and sentences in design documents decay. This does not.
+
+It checks four things rather than the one the plan specified:
+
+1. No Google global used outside `src/adapters/gas/`.
+2. No Node built-in imported outside `src/adapters/node/` (tests exempt). The mirror image
+   matters just as much: `node:fs` in a pipeline would break the Apps Script side, which has no
+   module system at all.
+3. `core/`, `services/` and `pipelines/` import no adapter. The rule stated as a **dependency
+   direction** rather than a word list — if `core/` knows adapters exist, the "pure" claim is
+   already false whatever the globals say.
+4. The detector fires. A layering test that cannot fail is worse than none, because it reports
+   success for ever while the thing it guards rots.
+
+**Both traps flagged at B1 and B3 were real**, and the test handles them: it strips comments and
+string literals before looking (several files name a global while explaining what replaced it,
+and a test that fails on its own documentation gets deleted by the first person it annoys), and
+it matches the globals **by use** — `Logger.log(` — rather than by name, because our own port is
+also called `Logger`.
+
+> **Verified by mutation, not by assertion.** Adding `SpreadsheetApp.openById()` to
+> `core/row.ts` made the suite fail with `core/row.ts: SpreadsheetApp`; restoring the file made
+> it pass. A guard nobody has ever seen fail is a guard nobody should trust.
+
+### C1–C4: what porting the core surfaced
+
+The pure core is a faithful port, not a rewrite. Everything below came out of reading the ten
+`.gs` files rather than from designing afresh — which is the point: the legacy comments are the
+most valuable prose in the repo, and several encode bugs that were paid for once already.
+
+**I introduced a parity bug and caught it by re-reading the source.** I had written
+`nextOnTimeCloseStreak` so an `overdue` cycle breaks the streak — which I still think is the
+better rule, since a cycle eleven days past due is a failure in progress and carrying the streak
+flatters it. **The legacy carries it**, on the stated grounds that "an unfinished cycle is not
+yet a failure, exactly as a day in progress is not". Reverted to match.
+
+> **Parity is the bar until Phase E.** The port must reproduce the legacy number before it is
+> allowed to improve on it — otherwise E3's tab-by-tab diff cannot tell a deliberate fix from an
+> accidental regression, and every disagreement becomes an investigation. Improvements are logged
+> for after cutover, not smuggled in during it.
+
+**Three traps that are all the same trap**, and worth stating once: a bare `YYYY-MM-DD` has no
+timezone, so constructing a `Date` from it and reading it back through a UTC-behind zone shifts
+it a day.
+
+| Where | What it would do |
+| --- | --- |
+| `isRestDay` | Report every Saturday as a Friday — so every weekend scores as `missed` |
+| `clockTimeOf` on a bare due date | Report a due time of 18:00 the day before |
+| `formatUtcDay` on an evening instant | File the 20:00 event under tomorrow — the 2026-08-20 bug |
+
+The first two are avoided by staying in UTC (a calendar string's weekday is timezone-free) and
+the third by taking the timezone as an argument. They pull in opposite directions, which is
+exactly why both formatters still exist and why the local one now names its zone.
+
+**The distinctions the types now carry**, each of which was previously a `""` doing double duty:
+
+- **`toNumberOrZero` vs `toNumberOrNull`.** A blank karma cell should sum as zero; a missing
+  estimate must stay absent, because "no estimate" and "estimated at zero" average differently.
+  `AreaDaily` carries `counts_observed` for the same reason.
+- **`was_overdue` stays three-state.** `"TRUE"` / `"FALSE"` / blank — collapsing blank to false
+  would quietly score every unverifiable row as on time.
+- **`daysBetweenDays` returns `null`, not `NaN`.** One `NaN` in a running total blanks a column.
+
+**The dedup key is the highest-consequence comparison in the project.** A recurring task reuses
+the SAME `task_id` every time it is checked off — only the timestamp differs — so deduping on id
+alone keeps the first completion of "Drink Water" and discards every one after it, making the
+entire history of every habit invisible. The key carries both, the separator is a `|` because a
+hyphen and a colon both occur inside ISO timestamps, and both halves are stringified because a
+task id arrives as a number from the API and a string from a sheet.
+
+**Two rules whose ORDER is load-bearing**, and which a careless port would flip:
+
+1. `habitDayStatus` tests `wasCompleted` **before** `isRestDay`, so a weekend check-off counts.
+   Testing the rest day first would silently discard it.
+2. `billCycleStatus` trusts Todoist's `was_overdue` **before** the dates, because the flag is
+   timestamp-precise and the dates are only day-precise. They legitimately disagree on a same-day
+   close.
+
+### D1–D2: the first real pipeline
+
+The sandwich works, and the entry point is the evidence. `runPortSyncOverdue` is about twenty
+lines: fetch two endpoints, call one pure function, apply the plan. **Every decision — which
+rows, which day to replace, what to log — happens in `planOverdue`, which touches nothing and is
+tested against fixtures.** That is the shape every remaining pipeline follows.
+
+**An eighth port appeared, and it was unavoidable.** The pipelines need the Todoist token and
+the timezone, and config crosses the seam exactly like everything else: Script Properties under
+Apps Script, environment variables under a runner. `SettingLookup` is now part of `Runtime`. It
+is a bare function rather than an interface because there is one operation and both platforms
+already expose that shape — and `requireSetting` above it is what keeps the fail-closed rule.
+
+**Three rules the service layer encodes, all of them bought with past incidents:**
+
+| Rule | Why |
+| --- | --- |
+| `limit=50` is a CAP, not a preference | The completed-tasks endpoint silently CLAMPS higher values on some accounts, so pages look complete when they are not — the worst failure mode for an append-only tab |
+| An EMPTY page stops the loop, cursor or no cursor | Some endpoints hand out a cursor indefinitely with nothing in the batch (observed on `/activities`); trusting it runs until the 6-minute cap |
+| A failed page THROWS | Returning what arrived so far looks like a short list rather than a broken call — and silently loses history |
+
+**The 429 message names the cause you will actually have.** Phase E runs two implementations
+against one token and the limit is per token, so the error says so rather than making you
+rediscover it at 23:30.
+
+**`days_overdue` is where the timezone work pays off.** The legacy comment records that a UTC
+stamp labelled every nightly snapshot with the NEXT day and inflated `days_overdue` by one **for
+months**. `planOverdue` takes `today` as an argument, so a test asserts the number directly at
+two different days — the drift is now visible in a test rather than in a chart a season later.
+
+**A day with nothing overdue still writes a plan.** A naive "skip when empty" would leave
+yesterday's snapshot looking like today's, and clearing your last overdue task would show it
+still overdue for ever. The empty `replaceWhere` is the point, not an oversight.
+
+> **One tidy-up worth naming.** I left a `shouldStopPaging` helper in `responses.ts` that
+> duplicated the rule the fetcher already implements — two sources of truth for the one thing in
+> this layer that must not drift. Deleted rather than wired up.
+
+### D3–D5: three more pipelines, and a real bug
+
+**A test caught a defect that would have corrupted the one irreplaceable tab.** The dedup key
+stringified whatever the sheet returned — and Sheets hands back a real `Date` once a cell is
+date-formatted. `String(aDate)` is `"Sun Sep 14 2026 07:02:00 GMT-0600"`, which matches no ISO
+string ever written, so **every completion would have failed to dedup and re-appended on every
+run**, silently, in the tab whose rows cannot be re-fetched.
+
+`canonicalInstant` now normalises both sides to the same moment, which also makes
+`2026-09-14T13:02:00Z` and `…:00.000Z` one key — the API omits milliseconds and a round-tripped
+cell adds them. A bare `2026-09-14` is deliberately left alone: a day is not an instant, and
+promoting it to midnight UTC would invent a time it never had.
+
+> The legacy code has the same fragility — it builds its key with a bare `String(r[0])` — and
+> gets away with it only because column A happens to hold text today. **The fix changes no
+> output**, because dedup keys live in memory and are never written, so parity is untouched.
+
+**Completions carries state, and the ordering is the whole design.** Two keys — the cursor and
+the In Review membership — both written only AFTER the rows land, which `applyWritePlan`
+guarantees. Advancing either before the write means the next run starts past completions that
+were never recorded: a permanent hole rather than a retryable failure.
+
+**The window decision got its own module**, because it is the thing most likely to be wrong
+invisibly. A window too SHORT loses history; one too LONG is rejected outright by the API's
+three-month limit. Four cases, each tested:
+
+| Case | Window | Why |
+| --- | --- | --- |
+| Usable cursor | `[cursor, now]` | The normal path |
+| **Empty tab** | Full 90 days, cursor ignored | Lets you clear the tab by hand and have it refill. Trusting the cursor here would fetch a few hours, write four rows, and leave four years gone |
+| Cursor > 90 days old | Clamped | The API hard-errors above the span, so an un-clamped window fetches **nothing** |
+| Cursor in the FUTURE | Full 90 days | Clock skew or a hand-edited property. `[future, now]` is an empty window that records zero every night while the cursor keeps advancing — invisible for ever |
+
+**In Review is a STATE, not an event**, and the entered-since diff is what makes it usable as
+one. The baseline persists **everything** currently there, not just the new ones: persisting
+only the new would make every unchanged task look new next run and re-record it nightly. Absent
+or malformed state reads as an empty set, so the next run treats everything as new — a one-time
+over-count rather than a silent under-count, which is the right way round, because a duplicate
+row is visible and removable and a missing one is neither.
+
+**Two normalisation traps in the activity source**, both carried across from hard-won comments:
+the project is at the top level as `parent_project_id` rather than in `extra_data`, and
+`due_date` is already the NEXT occurrence — the completed one is `completed_due_date`. Reading
+`due_date` would date every recurring completion one cycle into the future.
+
+**KarmaStats' re-run case** is the kind of bug that reads as data rather than as a fault: without
+excluding today's own row, a second run of the same day computes the delta against the row it is
+about to overwrite and always reports **0**, which looks like "no karma earned today".
+
+> **One tidy-up.** I had re-declared the cursor key as a local constant in `registry.ts` rather
+> than importing it — two sources of truth for a string that must match exactly, which is
+> precisely how a cursor silently stops being read. Now imported from the pipeline that owns it.
+
+### D6–D9: the derived tabs
+
+These read the tabs the fetch pipelines wrote rather than Todoist, which makes the orchestrator's
+[ordering invariant](#the-orchestrators-ordering-invariant) load-bearing rather than tidy.
+
+**A decision worth stating: the derived pipelines read the `*_port` tabs, not the legacy ones.**
+Reading `Completions` would compare the port's derivation of the LEGACY data against the
+legacy's own — which tests the derivation but says nothing about the pipeline feeding it. Reading
+`Completions_port` makes Phase E's diff an end-to-end check of the whole chain. The cost is that
+a derived tab is only as good as the fetch pipeline above it, which is the right dependency to
+have.
+
+**Three failure modes, all silent, all now pinned by a test:**
+
+| Tab | The mistake | What it would do |
+| --- | --- | --- |
+| TaskDaily | Reading prior state from today rather than **strictly before** | An hourly re-run reads its own half-written rows and resets every section age to zero |
+| TaskDaily | Including exit rows in prior state | A task that left last week is resurrected as a fresh exit row **every night, for ever** |
+| HabitDaily | Letting the replace boundary reach below the observed spine | A 400-day rebuild DELETES synthesised pre-spine rows while writing nothing in their place |
+
+**"A floor stays a floor."** TaskDaily's `section_age_seeded` marks a date that is a lower bound
+rather than an observation — the task was already somewhere when we first looked, and the true
+date is unknowable. Carrying that flag forward is what stops a guess quietly becoming a claim on
+day two. The four cases are now one tested function.
+
+**`workStageOf` is a rename tripwire, not just a mapper.** `Study/Reading` runs Backlog / In
+Progress / Quiz / Done and `Work` runs its own vocabulary; without normalisation "how much work
+is in review" cannot be asked across projects. Anything unrecognised becomes `other`, so a
+section renamed in Todoist shows up as a **growing `other` bucket** instead of vanishing from
+every chart.
+
+**HabitDaily writes nothing when the spine is missing.** The tempting alternative — write what
+you can — would clear the grid and refill it with nothing, destroying history to no purpose. A
+missing `RecurringStatus` is a reason to stop, not to proceed carefully.
+
+**The `due` column is 1 for everything except `not_due`**, which is what keeps a weekend
+check-off visible: doing a habit on a rest day is not nothing, and scoring it as "not owed" would
+throw the completion away.
+
+**Two API facts the tests now hold in place**, both easy to invert: Todoist's wire priority **4**
+is the UI's **p1** (an off-by-three waiting to happen), and a Completions row's `was_overdue` is
+three-state — blank is UNKNOWN, and collapsing it to FALSE would score every unverifiable cycle
+as closed on time.
+
+### D11–D12: the two write paths
+
+Both of these write something the shadow-tab scheme cannot cover, and they fail differently from
+everything else in the port, so they are shaped differently.
+
+**The reschedule is the only write path to Todoist, and THERE IS NO SHADOW TODOIST.** Every other
+pipeline writes `X_port` and a mistake costs a scratch tab; this one moves real tasks in the app
+you plan your day with. The B4b guards are irrelevant here — they check tab names and state keys,
+neither of which is involved.
+
+So the safety model is different: the decision is a **pure function returning a list of
+commands**, and issuing them is a separate step. Reading exactly what a run would send is always
+possible without sending it, and the log names every task and its target date **before** anything
+goes out.
+
+That needed one addition to the registry: a `writesExternally` flag. The dry-run twin was
+generated from `writes`, which lists TABS — so the one entry point that most needs a dry run
+would have been the only one without one. `portRescheduleHabitsDryRun` now exists.
+
+**It stays manual, with no trigger, ever.** A scheduled job that silently moves tasks in the app
+you plan your day with is a categorically different thing from one that writes a spreadsheet.
+
+Three rules the tests pin, each of which the legacy learned by getting it wrong:
+
+| Rule | What goes wrong without it |
+| --- | --- |
+| A habit and its sub-habits move as **one unit** | Judged individually they go stale on different clocks — the parent bumps once the grace window passes, its date-only steps not until the day flips. The steps sit a day behind their own routine and read as skipped that night |
+| A **healthy parent still drags a straggling step** forward | Do the routine but leave one box unchecked: Todoist rolls the parent forward on completion while the step stays put. Nothing else would ever touch it, and it stays overdue indefinitely |
+| **Undated steps are left alone** | Giving them a date silently opts them into the Overdue snapshot |
+
+**A timezone trap I had to handle explicitly.** Todoist sends a floating `…T07:00:00` with no
+offset, meaning 07:00 LOCAL. Parsing it directly reads it as UTC — which in a UTC-6 zone makes
+every morning habit look six hours more stale than it is, bumping routines that were only just
+missed. The offset is now derived from the zone at that instant rather than assumed, so it stays
+correct if a zone ever reintroduces DST.
+
+**The webhook never throws.** It is the port's only INBOUND path, and its caller is a phone that
+will not retry: a thrown error reaches a Shortcut as an opaque failure and the event is simply
+lost. It returns a JSON body saying what happened instead. It also accepts both `notes` and
+`note` — both spellings exist in Shortcuts in the wild — and **prefers the device's own
+timestamp**, because the watch may have been offline when the event happened and overwriting it
+would file every queued event at the moment it finally uploaded.
+
+> ⚠️ **D12's logic is ported but NOT deployed.** `event-log` is a separate clasp project and the
+> port bundle is not staged into it, so the live webhook still runs the legacy `.gs`. That is
+> deliberate: swapping a webhook that Apple Shortcuts POST to changes a URL's behaviour for a
+> device that cannot report failure, which is a Phase E decision rather than a Phase D one.
+
+### The first real failure: a 503, and what it cost
+
+The first manual run of `portSyncTaskDaily` died at 01:06 on 2026-09-14:
+
+```
+Error: Todoist /projects → HTTP 503:
+fetchAllTodoistPages	@ port-bundle.gs:2170
+runPortSyncTaskDaily	@ port-bundle.gs:2549
+```
+
+Todoist was briefly down. The port did exactly what the legacy does — throw, and lose the run —
+and nothing partial was written, because the throw happened during the fetch, before a plan
+existed. That part of the design held.
+
+**But it revealed a hole that only matters for one tab.** Most pipelines recompute from live
+state, so a lost run costs nothing: the next one produces the same rows. `TaskDaily` is
+observed-only. Todoist keeps no record of what was open on a past date, so a run lost to a
+thirty-second blip is a **permanent hole no re-run can fill** — and its aging columns read its
+own previous day, so the hole propagates into every row after it. A nightly trigger plus an
+upstream blip is not a hypothetical; it is a matter of time.
+
+So `services/retry-transport.ts` now wraps the transport in the Apps Script runtime:
+
+| Decision | Why |
+| --- | --- |
+| Retry **429, 408 and 5xx only** | A 401 is a bad token and a 400 is a bad request. Both are still wrong three seconds later, and retrying spends the 6-minute budget to reach the same error with a worse log |
+| **3 attempts**, 1s then 2s, capped at 8s | Every sleep is charged against the same 6-minute cap as the work, and a paged endpoint multiplies it by the page count. This covers a blip; a longer outage is a missed run, and the dashboard should say so |
+| **No jitter** | Jitter stops a herd of clients synchronising. There is one client, and an unpredictable delay would make the budget unpredictable too |
+| A persistent failure is **returned, not thrown** | `fetchAllTodoistPages` owns the "a failed page is fatal" decision. A decorator that threw would move that decision somewhere nobody looks |
+| **POSTs are retried too** | Not generally safe — safe *here* because the only POST is Todoist's `/sync`, and every command carries an idempotency uuid, so a replay is a no-op rather than a second reschedule |
+| Applied at the **runtime**, not inside the adapter | Keeps `gas-http.ts` a thin translation of `UrlFetchApp`, and keeps the policy testable under plain Node. The Node transport is deliberately **not** wrapped: it is still the F2 stub, and retrying `notImplemented` three times turns a clear error into a slow one |
+
+**This is not a parity break, but it will show up in the E3 diff.** A run that succeeds produces
+byte-identical rows either way; the only difference is how many runs succeed. Since the legacy
+has no retry, the port will occasionally survive a blip the legacy does not — appearing in the
+diff as the port having a row for a day the legacy missed. Expect it, and read it as the port
+being right.
+
+Two smaller things fell out of the same sitting:
+
+- The root `format:ts` glob still said `ts/**/*.ts`, a path that stopped existing at the
+  "one top-level directory per integration" restructure. **Prettier had been matching nothing**
+  since, and `npm run format` was silently a `.gs`-only command. Now points at `todoist/ts/`.
+- Writing the decorator's loop, the first version re-issued the request after the last attempt to
+  produce a return value — `maxAttempts + 1` calls and a doubled final delay. There is a test
+  named for it.
 
 ## Definition of done
 
@@ -792,7 +1439,7 @@ seems to contradict the current one.
 | 5 tabs, `BoardDaily` pending | **8 tabs** — `BillCycle`, `AreaDaily`, `TaskDaily` landed with the life-areas work |
 | Orchestrator ran 5 steps | **8 steps**, with a documented ordering constraint between them |
 | "the editor may be ahead of the repo" | **Neither, almost.** The A3 pull settled it: 9 of 11 files byte-identical, one editor-only comment, one editor-only duplicate function. Nothing would be lost by a push |
-| [`life-areas.md`](life-areas.md): "nothing is deployed" | **Stale.** All four life-areas files are live and identical to the repo. Whether the *tabs* exist is a separate question the pull cannot answer |
+| [`life-areas.md`](life-areas.md): "nothing is deployed" | **Wrong on both counts, and now corrected.** All four life-areas files are live and identical to the repo (A3), and the three tabs plus the `Completions` area columns exist (A6, 2026-09-13). What actually remains there is Phase 4, the Looker pages |
 | `sheets/` held every integration | **Restructured.** Three integrations at top level — `todoist/`, `health/`, `event-log/` — plus `trackingtime/` (unbuilt). The port workspace and the Looker specs moved *inside* `todoist/`, as `todoist/ts/` and `todoist/looker/`; `shortcuts/` moved into `event-log/`. Everhour was **deleted entirely**, code and schema both, and the health webhook was deleted pending a rework |
 
 Adopting clasp is therefore a hygiene win rather than a rescue — the code is already where it

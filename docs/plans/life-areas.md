@@ -1,13 +1,15 @@
 # Life areas and bill cycles — design
 
-**Status** (2026-09-08): **Phases 1–3 complete. Nothing is deployed.**
+**Status** (2026-09-13): **Phases 1–3 complete and deployed. Phase 4 not started.**
 
 Todoist is categorized (three parent projects, 16 nested children, four `area-*` labels, 135
-tagged tasks) and all eleven Phase 3 steps are written and tested — four new `.gs` files, three
-new tabs, three schema docs, 114 harness assertions passing. **None of it has been pasted into
-Apps Script yet**, so no sheet column or tab exists in the live spreadsheet, and no Looker page
-has been built. See [Deploying](#deploying) for the order, which matters: two steps rewrite
-data.
+tagged tasks) and all eleven Phase 3 steps are written, tested and live — four new `.gs` files,
+three new tabs, three schema docs, 114 harness assertions passing. **The code is deployed**: the
+A3 clasp pull of 2026-09-10 found all four files live and byte-identical to the repo, and you
+confirmed on 2026-09-13 that the `BillCycle`, `AreaDaily` and `TaskDaily` tabs exist and that
+`Completions` carries `area`, `area_source` and `was_overdue`. No Looker page has been built
+yet. [Deploying](#deploying) is kept as the record of the order that was followed, which
+mattered: two of its steps rewrite data.
 
 The work is organised into **four phases by where you do it** — Todoist, then Google Sheets,
 then the repo, then Looker Studio. Each phase is one tool and one sitting; you never have to
@@ -32,7 +34,7 @@ Phase 4 sub-phases can be built in any order once Phase 3 is deployed.
 | --- | --- | --- | --- |
 | **1** | Categorize tasks with area labels | Done via the Todoist API | **done 2026-09-08** |
 | **2** | Prepare the spreadsheet tabs | You — Google Sheets | **mostly superseded by 3.3.** 2.1 is now automatic; **2.0, the backup, is still required** before deploying |
-| **3** | Implement the scripts | Me — this repo | **written and tested 2026-09-08. Not deployed** — see [Deploying](#deploying) |
+| **3** | Implement the scripts | Me — this repo | **written and tested 2026-09-08; deployed and verified 2026-09-13** — code live per the A3 pull, tabs and columns confirmed in the spreadsheet |
 | **4a** | Bills report | Recipe: me · Build: you | not started — **build this one first** |
 | **4b** | Errands report | Recipe: me · Build: you | not started |
 | **4c** | Work report | Recipe: me · Build: you | not started |
@@ -808,7 +810,7 @@ Things that are true, deliberate, and easy to mistake for bugs later.
 
 | Gap | Status | Detail |
 | --- | --- | --- |
-| **Nothing is deployed** | Open | All of Phase 3 exists only in the repo. See [Deploying](#deploying) |
+| ~~**Nothing is deployed**~~ | Resolved 2026-09-13 | The four `.gs` files are live (A3 pull, byte-identical to the repo) and the three tabs plus the `Completions` area columns are confirmed present. Phase 4 — the Looker pages — is what remains |
 | **The four Looker recipe docs do not exist** | Open — first task of Phase 4 | `todoist/looker/{bills,errands,work,areas}-page.md`. The Phase 4 sections here are their specification |
 | **`todoist-sync-sections.gs` is still name-based** | Accepted, not fixed — but riskier now | It queries `#Work`. Verified safe — `##Work` proves `#Work` binds to the child, not `💼 Work`. With `Ascensus` gone this is a **single-name query**: a rename of `Work`, or a new project colliding with that name, now takes the whole In Review source down rather than half of it |
 | **A bill cycle that was never closed is invisible** | Accepted, documented | No completion event exists to key a row on. A deliberate undercount, per the house rule of undercounting rather than fabricating |

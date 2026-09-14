@@ -32,10 +32,20 @@ and design docs, currently being ported from Apps Script to TypeScript.
 
 ## Tooling
 
-- `npm run format` — prettier (tabs, width 8) over `**/*.gs` and
-  `ts/**/*.ts`. Run after touching either. Note two `.gs` files are committed
-  unformatted, so `format:gs` will reformat them incidentally; don't include
-  that churn in an unrelated commit.
+- `npm run format` — prettier (tabs, width 8) over `**/*.gs`,
+  `todoist/ts/src/**/*.ts` and `todoist/ts/scripts/**/*.mjs`. Run after touching
+  any of them. Note two `.gs` files are committed unformatted, so `format:gs`
+  will reformat them incidentally; don't include that churn in an unrelated
+  commit. The TS glob is deliberately **not** run with
+  `--no-error-on-unmatched-pattern`: it used to say `ts/**/*.ts`, a path that
+  stopped existing at the one-directory-per-integration restructure, and the
+  flag meant prettier matched zero files and exited 0 for months. Let a wrong
+  path fail loudly.
+- `npm --workspace todoist/ts run build` bundles the port to one Apps Script
+  file via esbuild, and **runs it in a sandbox before writing it**. Entry
+  points come from `src/entrypoints/registry.ts` — adding one there is what
+  makes it callable in the editor; nothing else exposes a global, and every
+  generated global is `port`-prefixed until the E4 cutover.
 - `npm test` and `npm run typecheck` are **real** and must stay green. Tests
   are `node --test` over `todoist/ts/src/**/*.test.ts` — Node 24 runs `.ts` directly,
   so there is no build step for tests and no test framework dependency.
@@ -43,9 +53,17 @@ and design docs, currently being ported from Apps Script to TypeScript.
   reaches GitHub Actions.
 - `todoist/ts/` is an npm workspace: run everything from the repo root
   (`npm --workspace todoist/ts run <script>`), never `cd ts`.
-- `clasp` deploys the `.gs` files; auth lives in `~/.clasprc.json` and does
-  not travel between machines. `clasp push` **overwrites the editor** — run
-  `clasp status` first.
+- **`clasp` deploys the `.gs` files — pasting into the editor is no longer the
+  deploy path.** Two live projects, each pushed from its own staged directory:
+  `npm --workspace todoist/ts run push:sync` (the ten
+  `todoist/legacy-implementation/*.gs`) and `push:log` (the event-log webhook).
+  `status:sync` / `status:log` are free dry-runs; run one first.
+  Three things that have each bitten already:
+  **a push replaces the whole project**, deleting editor files absent from the
+  staged directory; **`clasp push` exits 0 when it skips**, so success is proved
+  by re-reading the remote, never by the exit code; and a push that changes
+  `appsscript.json` prompts, then silently skips *everything* with no TTY to
+  answer. Auth lives in `~/.clasprc.json` and does not travel between machines.
 
 ## Workflow norms
 

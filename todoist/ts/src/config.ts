@@ -12,9 +12,11 @@
 // Failing closed turns that class of accident into an error message.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// A settings source. Returns null/undefined for keys it does not hold, which is
-// how both Script Properties and process.env already behave.
-export type SettingLookup = (key: string) => string | null | undefined;
+// The lookup itself is a port — see ports/settings.ts. Re-exported here so the
+// callers that use requireSetting need only one import.
+export type { SettingLookup } from "./ports/settings.ts";
+
+import type { SettingLookup } from "./ports/settings.ts";
 
 // Read a required setting, or throw explaining what to set and where.
 export function requireSetting(lookup: SettingLookup, key: string): string {

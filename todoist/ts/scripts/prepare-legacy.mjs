@@ -13,7 +13,14 @@
 //
 // Usage:  node scripts/prepare-legacy.mjs <project>   (project: sync | log)
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,7 +39,8 @@ const PROJECTS = {
 		claspConfig: ".clasp-sync.json",
 	},
 	log: {
-		description: "quantified-self-log webhook (bound to the spreadsheet)",
+		description:
+			"quantified-self-log webhook (bound to the spreadsheet)",
 		sourceDir: join(repoRoot, "event-log"),
 		manifest: join(workspaceDir, "appsscript", "log.json"),
 		claspConfig: ".clasp-log.json",
@@ -73,7 +81,9 @@ const sourceFiles = readdirSync(project.sourceDir)
 	.sort();
 
 if (sourceFiles.length === 0) {
-	fail(`no .gs files found in ${project.sourceDir.replace(repoRoot + "/", "")}`);
+	fail(
+		`no .gs files found in ${project.sourceDir.replace(repoRoot + "/", "")}`,
+	);
 }
 
 // dist/ is regenerable and gitignored, so a clean rebuild is always safe —
@@ -91,7 +101,10 @@ for (const fileName of sourceFiles) {
 
 // clasp expects the manifest to be named appsscript.json inside srcDir,
 // whatever it is called in the repo.
-writeFileSync(join(outputDir, "appsscript.json"), readFileSync(project.manifest));
+writeFileSync(
+	join(outputDir, "appsscript.json"),
+	readFileSync(project.manifest),
+);
 
 const relativeOutput = outputDir.replace(repoRoot + "/", "");
 console.log(`\nStaged ${projectName} -> ${relativeOutput}`);

@@ -35,8 +35,26 @@ separate standalone projects with separate scopes and separate Script Properties
 | Log webhook | Bound to `quantified-self-log` | [`event-log/apps-script.gs`](../event-log/apps-script.gs) |
 | Health webhook | Bound to `quantified-self-health` | **Code deleted pending rework** — see [`health/`](../health/README.md) |
 
-Deployment is moving from copy-paste to `clasp push` — see
-[`plans/typescript-port.md`](plans/typescript-port.md), Phase A.
+**Deployment is `clasp push`, not copy-paste.** Both live projects are deployed from this
+repo, each from its own staged directory:
+
+| Project | Command | Stages from |
+| --- | --- | --- |
+| *Quantified Self - Todoist Sync* | `npm --workspace todoist/ts run push:sync` | `todoist/legacy-implementation/*.gs` |
+| Log webhook | `npm --workspace todoist/ts run push:log` | `event-log/apps-script.gs` |
+
+Run `status:sync` / `status:log` first — it lists exactly what would be pushed and changes
+nothing. Two things to know before you push anything:
+
+- **A push replaces the whole project.** Files in the editor that are absent from the staged
+  directory are deleted, so never push a partial set.
+- **`clasp push` exits 0 when it skips.** A push that deploys nothing still looks like success,
+  so confirm by re-reading the project rather than trusting the exit code.
+
+Script IDs live in the gitignored `.clasp-sync.json` / `.clasp-log.json`; copy
+`todoist/ts/.clasp.example.json` to create them. clasp auth lives in `~/.clasprc.json` and does
+not travel between machines — see [`plans/typescript-port.md`](plans/typescript-port.md),
+Phase A.
 
 ---
 

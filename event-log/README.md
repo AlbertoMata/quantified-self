@@ -17,9 +17,21 @@ The shortcuts that write here are documented in [`../shortcuts/`](shortcuts/READ
 
 1. Create `quantified-self-log` with a tab named `Log`
 2. Paste the header row from [schema.md](schema.md) into row 1, then freeze row 1
-3. **Extensions → Apps Script** → paste [`apps-script.gs`](apps-script.gs) → Save
+3. Deploy the code with `npm --workspace todoist/ts run push:log` — not by pasting. The
+   Script ID lives in the gitignored `todoist/ts/.clasp-log.json`; see
+   [`docs/sheets.md`](../docs/sheets.md) for how to create it
 4. **Deploy → New deployment** → Web App → Execute as: Me → Access: Anyone → Deploy
 5. Copy the Web App URL and paste it into **every** Apple Shortcut that logs an event
 6. Add the sheet as a Looker Studio data source
 
 Bound to its spreadsheet, so no spreadsheet ID and no Script Properties are needed.
+
+> **A push updates the code, not necessarily the live URL.** A Web App deployment pinned to a
+> numbered version keeps serving that version; only a deployment tracking `HEAD` picks a push up
+> automatically. After changing `apps-script.gs`, check *Deploy → Manage deployments* — if the
+> Shortcuts' URL is pinned, it needs a new deployment before the change takes effect.
+>
+> The manifest is deployed too, and it carries `webapp.access` and `executeAs` — the settings
+> that let a Shortcut POST without a Google session. It is
+> [`todoist/ts/appsscript/log.json`](../todoist/ts/appsscript/log.json), pulled from the live
+> project. **Never hand-write it**: a wrong `access` value silently locks out every Shortcut.

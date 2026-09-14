@@ -12,7 +12,7 @@
   "scripts": {
     "format": "npm run format:gs && npm run format:ts",
     "format:gs": "prettier --write --parser babel \"**/*.gs\"",
-    "format:ts": "prettier --write --no-error-on-unmatched-pattern \"ts/**/*.ts\"",
+    "format:ts": "prettier --write \"todoist/ts/src/**/*.ts\" \"todoist/ts/scripts/**/*.mjs\"",
     "typecheck": "npm --workspace todoist/ts run typecheck",
     "test": "npm --workspace todoist/ts test"
   },
